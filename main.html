@@ -1,0 +1,1949 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Jiangnan CCTV Command Center - Branch Monitoring & Incident Ticketing</title>
+
+    <!-- Pre-paint theme: apply saved dark/light theme BEFORE first paint (no flash).
+         Default is LIGHT (the OS preference is ignored); dark is opt-in via the
+         toggle button, and the choice is remembered in localStorage. -->
+    <script>(function(){try{var t=localStorage.getItem('rcms_theme');if(!t){t='light';}document.documentElement.setAttribute('data-theme',t);}catch(e){document.documentElement.setAttribute('data-theme','light');}})();</script>
+
+    <!-- App icon + installable manifest. theme_color is a fixed brand green:
+         dark mode here is OPT-IN (see README), so prefers-color-scheme would
+         disagree with the actual UI. ThemeManager keeps the meta in sync. -->
+    <link rel="icon" href="tamang logo.png" type="image/png">
+    <link rel="apple-touch-icon" href="tamang logo.png">
+    <link rel="manifest" href="manifest.json">
+    <meta name="theme-color" id="themeColorMeta" content="#72bf6a">
+
+    <!-- Font Awesome 6 -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <!-- Google Fonts: Inter -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+    <!-- jsPDF: generates the downloadable "COMMAND CENTER REPORT" PDF (violation reports) -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <!-- Firebase SDKs -->
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-firestore.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-auth.js"></script>
+    <!-- Custom Styles -->
+    <link rel="stylesheet" href="style.css">
+    <!-- Theme System: dark mode + shared header components (loaded AFTER style.css) -->
+    <link rel="stylesheet" href="theme.css">
+    <!-- HR <-> Superadmin chat (superadmin only on this page) -->
+    <link rel="stylesheet" href="chat.css">
+    <!-- ============================================================ -->
+    <!-- OPTION-2 MOBILE HEADER + COMMAND BANNER (phone only)          -->
+    <!-- ============================================================ -->
+    <!-- Tailwind (Play CDN) powers ONLY the pasted Option-2 blocks:
+         header.jn2-mobile-only and section.jn2-mobile-only. preflight is
+         OFF so Tailwind's reset can never touch the existing app CSS
+         (style.css / theme.css), and those blocks are hidden on desktop
+         anyway. Verified: no class name in the current markup collides
+         with a Tailwind utility. -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            corePlugins: { preflight: false },
+            theme: {
+                extend: {
+                    colors: {
+                        jn: {
+                            green: '#2e7d32',
+                            lightGreen: '#4caf50',
+                            accentGreen: '#e8f5e9',
+                            darkBg: '#0f172a',
+                            darkCard: '#1e293b',
+                            darkHeader: '#0f172a'
+                        }
+                    }
+                }
+            }
+        };
+    </script>
+
+    <!-- The app stores dark/light in data-theme (js/theme.js), while the
+         pasted blocks use Tailwind's `dark:` variant, which keys off the
+         `dark` CLASS on <html>. Keep the two in sync so the pasted icons
+         and dark colors follow the real theme toggle. -->
+    <script>
+        (function () {
+            var root = document.documentElement;
+            function syncThemeClass() {
+                root.classList.toggle('dark', root.getAttribute('data-theme') === 'dark');
+            }
+            syncThemeClass();
+            if (window.MutationObserver) {
+                new MutationObserver(syncThemeClass).observe(root, { attributes: true, attributeFilter: ['data-theme'] });
+            }
+        })();
+    </script>
+
+    <style>
+        /* ----------------------------------------------------------
+           Visibility rules for the Option-2 blocks.
+           899px is the app's own phone breakpoint (style.css turns the
+           sidebar into an off-canvas drawer at exactly this width).
+           Selectors are #id-scoped and !important so they always win
+           over the Tailwind utility classes on the pasted markup.
+           ---------------------------------------------------------- */
+
+        /* Desktop (≥900px): identical to the current UI — blocks hidden. */
+        #mainContent > header.jn2-mobile-only,
+        .jn2-fab,
+        #tabDashboard > section.jn2-mobile-only {
+            display: none !important;
+        }
+
+        @media (max-width: 899px) {
+            /* Phone (899px and below) + ANY tab: the pasted Option-2 header replaces
+               the classic .top-header everywhere, so the phone UI never jumps
+               between two header styles while switching tabs. Both headers
+               stay in the DOM (display:none only) because script.js, the
+               palette and the tests depend on their IDs (#btnAddStatus,
+               #btnNewViolation, #pageTitle, #authStatusText, .header-actions).
+               Add Status stays Dashboard-only (the pasted banner); Report
+               Violation is reachable phone-wide via .jn2-fab below. */
+            #mainContent > header.jn2-mobile-only {
+                display: flex !important;
+            }
+            #mainContent > .top-header {
+                display: none !important;
+            }
+
+            .jn2-fab { display: flex !important; }
+
+            /* Chat keeps ONE phone entry point. The Option-2 header icon
+               opens the same modal by code, so the floating circle would
+               only duplicate it on top of content. The typing pill goes
+               along with it. Drag logic in js-chat stays untouched. */
+            #chatLauncher,
+            #chatLauncherTyping { display: none !important; }
+
+            #tabDashboard > section.jn2-mobile-only {
+                display: block !important;
+            }
+            #tabDashboard > .dash-hero {
+                display: none !important;
+            }
+        }
+        /* ----------------------------------------------------------
+           Scoped "preflight-lite" for the pasted Option-2 blocks.
+
+           Tailwind's real global preflight is deliberately OFF (it
+           would restyle every button/card in the app), so the browser's
+           own default button chrome — the grey box with the outset
+           "dark edge" around each icon button — has to be neutralised
+           HERE, inside .jn2-mobile-only only.
+
+           :where() keeps this rule at specificity (0,1,0): Tailwind
+           utilities carry the same specificity and are injected AFTER
+           this block, so wherever the mockup sets its own border /
+           background (Monitor, Add Status) those still win — while the
+           browser/app element rules at (0,0,1) are always beaten.
+           ---------------------------------------------------------- */
+        .jn2-mobile-only :where(button),
+        .jn2-fab:where(button) {
+            -webkit-appearance: none;
+            appearance: none;
+            border: 0;
+            background-color: transparent;
+            background-image: none;
+            -webkit-tap-highlight-color: transparent;
+        }
+    </style>
+
+</head>
+<body>
+
+    <!-- ============================================================ -->
+    <!-- SIDEBAR                                                       -->
+    <!-- ============================================================ -->
+    <aside class="sidebar" id="sidebar">
+        <div class="sidebar-header">
+            <div class="logo">
+                <img src="https://jiangnanhotpot.com/cdn/shop/files/jiangnan-logo-transparent_40f90d62-6f5e-4f34-9a1a-cf948a106904.png?v=1721972026" alt="Jiangnan Logo" class="brand-logo" onerror="this.onerror=null;this.src='header.png';">
+                <span class="logo-text u-hidden">CCTV Command</span>
+            </div>
+        </div>
+        <nav class="sidebar-nav">
+            <div class="nav-section-label">Operations</div>
+            <button class="nav-item active" data-tab="dashboard">
+                <i class="fas fa-th-large"></i>
+                <span>Dashboard</span>
+            </button>
+            <button class="nav-item" data-tab="branches">
+                <i class="fas fa-code-branch"></i>
+                <span>Branch Monitor</span>
+                <span class="badge u-hidden" id="offlineBadge">0</span>
+            </button>
+            <button class="nav-item" data-tab="history">
+                <i class="fas fa-history"></i>
+                <span>Status History</span>
+            </button>
+
+            <div class="nav-section-label">Incidents</div>
+            <button class="nav-item" data-tab="tickets">
+                <i class="fas fa-ticket-alt"></i>
+                <span>Tickets</span>
+                <span class="badge u-hidden" id="pendingBadge">0</span>
+            </button>
+            <button class="nav-item" data-tab="violations" id="violationsNavItem">
+                <i class="fas fa-video"></i>
+                <span>Violations Report</span>
+                <span class="badge u-hidden" id="violationsBadge">0</span>
+            </button>
+
+            <div class="nav-section-label u-hidden" id="adminNavLabel">Administration</div>
+            <button class="nav-item" data-tab="users" id="usersNavItem">
+                <i class="fas fa-user-plus"></i>
+                <span>User Approvals</span>
+                <span class="badge u-hidden" id="usersBadge">0</span>
+            </button>
+            <button class="nav-item u-hidden" data-tab="approvals" id="approvalsNavItem">
+                <i class="fas fa-clipboard-check"></i>
+                <span>Ticket Reviews</span>
+                <span class="badge u-hidden" id="approvalsBadge">0</span>
+            </button>
+        </nav>
+        <div class="sidebar-footer">
+            <div class="current-datetime" id="currentDatetime">
+                <i class="fas fa-clock"></i>
+                <span id="datetimeDisplay">--:--</span>
+            </div>
+            <button class="logout-btn-sidebar u-hidden" id="logoutBtn">
+                <i class="fas fa-sign-out-alt"></i>
+                <span>Logout</span>
+            </button>
+            <button class="logout-btn-sidebar" id="loginBtn">
+                <i class="fas fa-sign-in-alt"></i>
+                <span>Login</span>
+            </button>
+        </div>
+    </aside>
+
+    <div class="mobile-nav-backdrop" id="sidebarBackdrop" aria-hidden="true"></div>
+
+    <div id="notificationBar" class="notification-bar" role="status" aria-live="polite">
+        <span id="notificationMsg"></span>
+        <button type="button" class="notification-close" onclick="dismissNotification()" aria-label="Dismiss notification">&times;</button>
+    </div>
+
+    <!-- ============================================================ -->
+    <!-- MAIN CONTENT                                                  -->
+    <!-- ============================================================ -->
+    <main class="main-content" id="mainContent">
+
+        <!-- ============================================================ -->
+        <!-- OPTION-2 HEADER (pasted verbatim from the Option 2 mockup;   -->
+        <!-- marker class added) — PHONE ONLY.                            -->
+        <!-- The media query in the page head applies this at 899px and below
+        <!-- on EVERY phone tab (hiding .top-header there); on desktop it stays
+        <!-- display:none, so the current header below is untouched. It sits
+        <!-- directly under the main element, so sticky top keeps working. -->
+        <!-- ============================================================ -->
+        <header class="jn2-mobile-only sticky top-0 z-30 bg-white/90 dark:bg-jn-darkCard/90 backdrop-blur-md shadow-sm border-b border-gray-200 dark:border-gray-800/80 px-4 py-3 flex items-center justify-between transition-colors">
+          <div class="flex items-center gap-3">
+            <!-- Side Menu Drawer Trigger -->
+            <button id="openDrawer" aria-label="Open Navigation Menu" class="p-2 -ml-2 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800/80 rounded-xl transition-colors active:scale-95">
+              <i class="fa-solid fa-bars text-lg"></i>
+            </button>
+
+            <!-- Brand & Status -->
+            <div class="flex items-center gap-2">
+              <span class="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse ring-4 ring-emerald-500/20"></span>
+              <h1 id="jn2HeaderTitle" class="font-bold text-base tracking-tight text-gray-900 dark:text-white">Dashboard</h1>
+            </div>
+          </div>
+
+          <!-- Header Right Docked Controls -->
+          <div class="flex items-center gap-1.5">
+            <!-- Expandable Search Toggle -->
+            <button id="toggleSearch" aria-label="Search" class="p-2 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800/80 rounded-xl transition-colors active:scale-95">
+              <i class="fa-solid fa-magnifying-glass text-sm"></i>
+            </button>
+
+            <!-- Header Docked Support Chat Icon (No Floating Widgets) -->
+            <button id="openChatModal" aria-label="Open Chat Support" class="relative p-2 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800/80 rounded-xl transition-colors active:scale-95">
+              <i class="fa-solid fa-comments text-base text-emerald-600 dark:text-emerald-400"></i>
+              <span class="absolute top-1.5 right-1.5 w-2.5 h-2.5 bg-emerald-500 rounded-full ring-2 ring-white dark:ring-jn-darkCard"></span>
+            </button>
+
+            <!-- Theme Toggle (Dark / Light) -->
+            <button id="toggleDark" aria-label="Toggle Theme" class="p-2 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800/80 rounded-xl transition-colors active:scale-95">
+              <i class="fa-solid fa-moon dark:hidden text-slate-700"></i>
+              <i class="fa-solid fa-sun hidden dark:block text-amber-400"></i>
+            </button>
+
+            <!-- User Profile Avatar Badge Trigger -->
+            <button id="openProfile" aria-label="User Profile" class="relative ml-1 active:scale-95 transition-transform">
+              <div class="w-8 h-8 rounded-full bg-emerald-700 text-white font-bold text-xs flex items-center justify-center ring-2 ring-emerald-500/30 shadow-inner" id="jn2AvatarInitial">N</div>
+              <span class="absolute bottom-0 right-0 w-2.5 h-2.5 bg-emerald-500 border-2 border-white dark:border-jn-darkCard rounded-full"></span>
+            </button>
+          </div>
+        </header>
+
+
+        <!-- TOP HEADER -->
+        <header class="top-header">
+            <div class="header-left">
+                <button type="button" class="menu-toggle" id="sidebarToggle" aria-label="Toggle menu">
+                    <i class="fas fa-bars"></i>
+                </button>
+                <h1 class="page-title" id="pageTitle">Dashboard</h1>
+                <span class="header-subtitle" id="pageSubtitle">Overview</span>
+            </div>
+            <div class="header-right">
+                <div class="header-actions">
+                    <button type="button" class="icon-btn" data-theme-toggle aria-label="Switch to dark mode" title="Switch to dark mode">
+                        <i class="fas fa-moon"></i>
+                    </button>
+                </div>
+                <div class="header-auth-status" id="authStatus">
+                    <span class="auth-dot"></span>
+                    <span id="authStatusText">Loading...</span>
+                </div>
+                <button class="btn btn-primary btn-add" id="btnAddStatus">
+                    <i class="fas fa-plus-circle"></i>
+                    <span>Add Status</span>
+                </button>
+                <button class="btn btn-primary u-hidden" id="btnNewViolation"><i class="fas fa-plus"></i> Report Violation</button>
+            </div>
+        </header>
+
+<!-- ============================================================ -->
+        <!-- TAB: DASHBOARD                                                -->
+        <!-- ============================================================ -->
+        <section class="tab-content active" id="tabDashboard">
+
+            <!-- ============================================================ -->
+            <!-- OPTION-2 COMMAND CENTER BANNER (pasted verbatim from the     -->
+            <!-- Option 2 mockup; marker class added) — PHONE ONLY.           -->
+            <!-- Hidden on desktop by the media query in <head>, where the     -->
+            <!-- .dash-hero right below stays the current UI.                 -->
+            <!-- ============================================================ -->
+            <section class="jn2-mobile-only relative overflow-hidden rounded-2xl bg-gradient-to-br from-slate-900 via-slate-800 to-emerald-950 p-5 text-white shadow-xl border border-slate-700/60">
+              <!-- Top Meta Info -->
+              <div class="flex items-center justify-between mb-3">
+                <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-bold tracking-wider uppercase bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
+                  <i class="fa-solid fa-shield-halved text-[9px]"></i> Command Center • Live
+                </span>
+                <span class="text-xs font-semibold text-slate-300 bg-slate-800/80 px-2.5 py-1 rounded-md border border-slate-700/80 shadow-inner" id="jn2BannerTime">--:--</span>
+              </div>
+
+              <!-- Overview Header Text -->
+              <h2 class="text-xl font-extrabold tracking-tight mb-1 text-white">Network Operations Overview</h2>
+              <p class="text-xs text-slate-300 mb-5 leading-relaxed" id="jn2BannerSub">Real-time health across all branches.</p>
+
+              <!-- Contextually Docked Action Buttons Footer (NO Floating Buttons) -->
+              <div class="flex items-center justify-between pt-3 border-t border-slate-700/60 gap-2">
+                <div class="text-[11px] text-slate-400 font-bold tracking-wider uppercase" id="jn2BannerDate">—</div>
+
+                <div class="flex items-center gap-2">
+                  <!-- Secondary Action: Branch Monitor -->
+                  <button id="openBranchMonitor" class="bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-600 px-3 py-1.5 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-all active:scale-95 shadow-sm">
+                    <i class="fa-solid fa-tower-cell text-xs text-emerald-400"></i> Monitor
+                  </button>
+
+                  <!-- Primary Action: Contextual + Add Status Modal Trigger -->
+                  <button id="openStatusModal" class="bg-emerald-600 hover:bg-emerald-500 text-white px-3.5 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-md shadow-emerald-950/50 transition-all active:scale-95 ring-2 ring-emerald-500/30">
+                    <i class="fa-solid fa-plus text-xs"></i> Add Status
+                  </button>
+                </div>
+              </div>
+            </section>
+
+
+            <!-- Dashboard hero: greeting + live status -->
+            <div class="dash-hero">
+                <div class="dash-hero-text">
+                    <p class="dash-eyebrow"><i class="fas fa-shield-halved"></i> Command Center · Live</p>
+                    <h2 class="dash-hero-title">Network Operations Overview</h2>
+                    <p class="dash-hero-sub" id="dashHeroSub">Real-time health across all branches, tickets &amp; violations.</p>
+                </div>
+                <div class="dash-hero-side">
+                    <div class="dash-hero-clock">
+                        <span class="dash-hero-time" id="dashHeroTime">--:--</span>
+                        <span class="dash-hero-date" id="dashHeroDate">—</span>
+                    </div>
+                    <button type="button" class="btn btn-sm btn-primary dash-hero-btn" onclick="switchTab('branches')">
+                        <i class="fas fa-tower-broadcast"></i> Branch Monitor
+                    </button>
+                </div>
+            </div>
+
+            <!-- Dashboard alert strip: critical status at a glance -->
+            <div class="dash-alert u-hidden" id="dashAlert" role="status" aria-live="polite"></div>
+
+            <!-- Section: Branch Health -->
+            <div class="section-header">
+                <div>
+                    <h2><i class="fas fa-server u-icon-primary u-icon-gap"></i>Branch Health</h2>
+                    <p class="u-section-sub">Real-time status of all branches</p>
+                </div>
+            </div>
+
+            <div class="summary-cards dash-kpis">
+                <div class="card card-readiness dash-kpi" onclick="switchTab('branches')">
+                    <div class="dash-kpi-top">
+                        <div class="card-icon"><i class="fas fa-gauge-high"></i></div>
+                        <span class="dash-kpi-trend" id="readinessDelta"></span>
+                    </div>
+                    <div class="card-info">
+                        <span class="card-label">Operational Readiness</span>
+                        <span class="card-value" id="readinessPct">—</span>
+                    </div>
+                    <div class="dash-progress"><span class="dash-progress-fill readiness u-bar-empty" id="readinessBar"></span></div>
+                </div>
+                <div class="card card-outage dash-kpi" onclick="switchTab('branches')">
+                    <div class="dash-kpi-top">
+                        <div class="card-icon"><i class="fas fa-exclamation-triangle"></i></div>
+                        <span class="dash-kpi-trend" id="longestOutage">—</span>
+                    </div>
+                    <div class="card-info">
+                        <span class="card-label">Active Outages</span>
+                        <span class="card-value" id="activeOutages">0</span>
+                    </div>
+                    <div class="dash-progress"><span class="dash-progress-fill outage u-bar-empty" id="outageBar"></span></div>
+                </div>
+                <div class="card card-pending dash-kpi" onclick="switchTab('tickets')">
+                    <div class="dash-kpi-top">
+                        <div class="card-icon"><i class="fas fa-hourglass-half"></i></div>
+                        <span class="dash-kpi-trend" id="ticketsOverdue">—</span>
+                    </div>
+                    <div class="card-info">
+                        <span class="card-label">Tickets Needing Action</span>
+                        <span class="card-value" id="ticketsAction">0</span>
+                    </div>
+                    <div class="dash-progress"><span class="dash-progress-fill tickets u-bar-empty" id="ticketsBar"></span></div>
+                </div>
+                <div class="card card-resolved dash-kpi" onclick="switchTab('violations')">
+                    <div class="dash-kpi-top">
+                        <div class="card-icon"><i class="fas fa-video"></i></div>
+                        <span class="dash-kpi-trend" id="violationsDelta"></span>
+                    </div>
+                    <div class="card-info">
+                        <span class="card-label">Violations This Week</span>
+                        <span class="card-value" id="violationsWeek">0</span>
+                    </div>
+                    <div class="dash-progress"><span class="dash-progress-fill violations u-bar-empty" id="violationsBar"></span></div>
+                </div>
+            </div>
+
+            <!-- Needs Attention + Live Activity -->
+            <div class="dash-split">
+                <div class="dash-panel dash-queue">
+                    <div class="dash-panel-head">
+                        <h3 class="chart-title" ><i class="fas fa-bell u-icon-danger u-icon-gap"></i>Needs Attention</h3>
+                        <span class="dash-panel-count" id="attentionCount"></span>
+                    </div>
+                    <div class="table-container" style="border:none;padding:0;">
+                        <table class="data-table" id="attentionTable">
+                            <thead>
+                                <tr>
+                                    <th style="width:34px;"></th>
+                                    <th>Branch</th>
+                                    <th>Issue</th>
+                                    <th>Elapsed</th>
+                                    <th style="width:70px;"></th>
+                                </tr>
+                            </thead>
+                            <tbody id="attentionBody">
+                                <tr>
+                                    <td colspan="5" class="empty-state">
+                                        <i class="fas fa-check-circle"></i>
+                                        <p>All clear — nothing needs attention.</p>
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+                <div class="dash-panel dash-activity">
+                    <div class="dash-panel-head">
+                        <h3 class="chart-title" ><i class="fas fa-bolt u-icon-warning u-icon-gap"></i>Live Activity</h3>
+                    </div>
+                    <ul class="activity-feed" id="activityFeed">
+                        <li class="activity-empty" aria-busy="true" aria-label="Loading activity">
+                            <div class="skeleton-stack">
+                                <div class="skeleton skeleton-avatar" style="--skeleton-h:30px"></div>
+                                <div class="skeleton skeleton-line" style="--skeleton-w:88%"></div>
+                                <div class="skeleton skeleton-line" style="--skeleton-w:64%"></div>
+                                <div class="skeleton skeleton-line" style="--skeleton-w:76%"></div>
+                            </div>
+                        </li>
+                    </ul>
+                </div>
+            </div>
+
+            <!-- Section: Analytics -->
+            <div class="section-header dash-analytics-head">
+                <div>
+                    <h2><i class="fas fa-chart-line u-icon-primary u-icon-gap"></i>Performance Analytics</h2>
+                    <p class="u-section-sub">Downtime trends &amp; branch reliability</p>
+                </div>
+                <div class="toolbar dash-filters" >
+                    <div class="sort-group">
+                        <label for="dashBranchFilter"><i class="fas fa-store"></i></label>
+                        <select id="dashBranchFilter">
+                            <option value="all">All Branches</option>
+                        </select>
+                    </div>
+                    <div class="filter-group" id="dashRangeGroup">
+                        <button class="filter-btn" data-dash-range="today">Today</button>
+                        <button class="filter-btn" data-dash-range="7d">7d</button>
+                        <button class="filter-btn active" data-dash-range="month">This month</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Charts -->
+            <div class="charts-row" id="dashChartsRow">
+                <div class="chart-container">
+                    <div class="dash-chart-head">
+                        <h3 class="chart-title" >Branch Status Overview</h3>
+                        <span class="dash-chart-pill" id="statusMixPill">—</span>
+                    </div>
+                    <div class="chart-wrapper">
+                        <canvas id="statusChart"></canvas>
+                    </div>
+                </div>
+                <div class="chart-container">
+                    <div class="dash-chart-head">
+                        <h3 class="chart-title" >Downtime Trend</h3>
+                        <span class="dash-chart-pill" id="trendTotalPill">—</span>
+                    </div>
+                    <div class="chart-wrapper">
+                        <canvas id="trendChart"></canvas>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Branch Uptime — This Month (derived from status logs) -->
+            <div class="dash-panel dash-uptime">
+                <div class="dash-panel-head">
+                    <h3 class="chart-title" ><i class="fas fa-heart-pulse u-icon-primary u-icon-gap"></i>Branch Uptime — This Month</h3>
+                    <span class="dash-chart-pill" id="uptimeNetworkPill">—</span>
+                </div>
+                <div class="uptime-list" id="uptimePanelList">
+                    <div class="activity-empty" aria-busy="true" aria-label="Loading uptime">
+                        <div class="skeleton-stack">
+                            <div class="skeleton skeleton-line" style="--skeleton-w:92%"></div>
+                            <div class="skeleton skeleton-line" style="--skeleton-w:78%"></div>
+                            <div class="skeleton skeleton-line" style="--skeleton-w:85%"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Downtime leaderboard + Tickets Overview -->
+            <div class="dash-split dash-bottom">
+                <div class="dash-panel dash-leaders">
+                    <div class="dash-panel-head">
+                        <h3 class="chart-title" ><i class="fas fa-trophy u-icon-warning u-icon-gap"></i>Top Downtime This Month</h3>
+                    </div>
+                    <ol class="leader-list" id="downtimeLeaders">
+                        <li class="activity-empty" aria-busy="true" aria-label="Loading downtime leaders">
+                            <div class="skeleton-stack">
+                                <div class="skeleton skeleton-line" style="--skeleton-w:86%"></div>
+                                <div class="skeleton skeleton-line" style="--skeleton-w:72%"></div>
+                                <div class="skeleton skeleton-line" style="--skeleton-w:90%"></div>
+                            </div>
+                        </li>
+                    </ol>
+                </div>
+                <div class="dash-panel dash-tickets">
+                    <div class="section-header" style="margin-bottom:12px;">
+                        <div>
+                            <h2><i class="fas fa-ticket-alt" style="color:var(--color-warning);margin-right:8px;"></i>Tickets Overview</h2>
+                            <p class="u-section-sub">Recent incident ticket summary</p>
+                        </div>
+                    </div>
+
+                    <div class="summary-cards dash-ticket-cards">
+                <div class="card card-total" onclick="switchTab('tickets')">
+                    <div class="card-icon"><i class="fas fa-list"></i></div>
+                    <div class="card-info">
+                        <span class="card-value" id="totalTickets">0</span>
+                        <span class="card-label">Total Tickets</span>
+                    </div>
+                </div>
+                <div class="card card-pending" onclick="switchTab('tickets')">
+                    <div class="card-icon"><i class="fas fa-hourglass-half"></i></div>
+                    <div class="card-info">
+                        <span class="card-value" id="pendingTickets">0</span>
+                        <span class="card-label">Pending</span>
+                        <span class="card-delta" id="ticketsDelta"></span>
+                    </div>
+                </div>
+                <div class="card card-progress" onclick="switchTab('tickets')">
+                    <div class="card-icon"><i class="fas fa-cogs"></i></div>
+                    <div class="card-info">
+                        <span class="card-value" id="progressTickets">0</span>
+                        <span class="card-label">In Progress</span>
+                    </div>
+                </div>
+                <div class="card card-resolved" onclick="switchTab('tickets')">
+                    <div class="card-icon"><i class="fas fa-check-circle"></i></div>
+                    <div class="card-info">
+                        <span class="card-value" id="resolvedTickets">0</span>
+                        <span class="card-label">Resolved</span>
+                    </div>
+                </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- ============================================================ -->
+        <!-- TAB: BRANCH MONITOR                                           -->
+        <!-- ============================================================ -->
+        <section class="tab-content" id="tabBranches">
+            <div class="toolbar">
+                <div class="search-box">
+                    <i class="fas fa-search"></i>
+                    <input type="text" id="searchInput" placeholder="Search branches...">
+                </div>
+                <div class="filter-group">
+                    <button class="filter-btn active" data-filter="all">All</button>
+                    <button class="filter-btn" data-filter="Online">Online</button>
+                    <button class="filter-btn" data-filter="Offline">Offline</button>
+                </div>
+                <div class="sort-group">
+                    <label for="groupFilter"><i class="fas fa-layer-group"></i></label>
+                    <select id="groupFilter">
+                        <option value="">All Groups</option>
+                    </select>
+                </div>
+                <div class="sort-group">
+                    <label for="downtimeFilter"><i class="fas fa-clock"></i></label>
+                    <select id="downtimeFilter">
+                        <option value="">All Downtime</option>
+                        <option value="has">Has Downtime</option>
+                        <option value="none">No Downtime</option>
+                        <option value="gt1h">> 1 hour</option>
+                        <option value="gt6h">> 6 hours</option>
+                        <option value="gt24h">> 24 hours</option>
+                    </select>
+                </div>
+                <div class="sort-group">
+                    <label for="sortSelect"><i class="fas fa-sort"></i></label>
+                    <select id="sortSelect">
+                        <option value="group">Group</option>
+                        <option value="branchName">Branch Name</option>
+                        <option value="currentStatus">Status</option>
+                        <option value="lastUpdated">Last Updated</option>
+                        <option value="downtime">Downtime Duration</option>
+                    </select>
+                </div>
+                <button class="btn btn-sm btn-primary" id="btnManageBranches" style="background:var(--color-primary);color:white;border:none;padding:9px 18px;border-radius:var(--radius-md);font-weight:600;font-size:0.82rem;display:flex;align-items:center;gap:6px;cursor:pointer;transition:all 0.25s ease;">
+                    <i class="fas fa-cog"></i> Manage Branches
+                </button>
+            </div>
+
+            <!-- Quick Branch Status (relocated from the dashboard top) -->
+            <div class="quick-status">
+                <h3>Quick Branch Status</h3>
+                <div class="quick-status-list" id="quickStatusListBranchTab">
+                    <div class="loading-spinner"><i class="fas fa-spinner fa-spin"></i> Loading...</div>
+                </div>
+            </div>
+
+<div class="table-container">
+                <table class="data-table row-card-table" id="branchesTable">
+                    <thead>
+                        <tr>
+                            <th>Branch</th>
+                            <th>Current Status</th>
+                            <th>Uptime</th>
+                            <th>Last Updated</th>
+                            <th>Current Downtime</th>
+                            <th>Actions</th>
+                            <th class="approval-card-th" aria-hidden="true"><span class="u-hidden">Card</span></th>
+                        </tr>
+                    </thead>
+                    <tbody id="branchesTableBody">
+                        <tr>
+                            <td colspan="7" class="empty-state">
+                                <i class="fas fa-database"></i>
+                                <p>No branches found. Add a status update to get started.</p>
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+            <div class="pagination" id="branchPagination">
+                <span class="page-info">Loading...</span>
+            </div>
+        </section>
+
+        <!-- ============================================================ -->
+        <!-- TAB: STATUS HISTORY                                          -->
+        <!-- ============================================================ -->
+        <section class="tab-content" id="tabHistory">
+            <div class="toolbar">
+                <div class="search-box">
+                    <i class="fas fa-search"></i>
+                    <input type="text" id="historySearch" placeholder="Search history...">
+                </div>
+                <div class="filter-group">
+                    <button class="filter-btn active" data-history-filter="all">All</button>
+                    <button class="filter-btn" data-history-filter="Online">Online</button>
+                    <button class="filter-btn" data-history-filter="Offline">Offline</button>
+                </div>
+                <div class="sort-group">
+                    <label for="historyBranchFilter"><i class="fas fa-code-branch"></i></label>
+                    <select id="historyBranchFilter">
+                        <option value="">All Branches</option>
+                    </select>
+                </div>
+                <div class="sort-group">
+                    <label for="historyDateFrom"><i class="fas fa-calendar-alt"></i></label>
+                    <input type="date" id="historyDateFrom">
+                </div>
+                <div class="sort-group">
+                    <label></label>
+                    <input type="date" id="historyDateTo">
+                </div>
+            </div>
+
+            <!-- Print Report Action Card -->
+            <div class="print-action-card">
+                <div class="print-action-icon">
+                    <i class="fas fa-file-alt"></i>
+                </div>
+                <div class="print-action-body">
+                    <strong>Monthly Status Report</strong>
+                    <p>Generate a printable consolidated report grouped by branch with incident history. Choose a month below, then print.</p>
+                </div>
+                <div class="print-action-control">
+                    <label for="reportMonth"><i class="fas fa-calendar-alt"></i> Report Month</label>
+                    <input type="month" id="reportMonth" title="Select the month to include in the report">
+                </div>
+                <button class="btn btn-primary btn-print" id="btnPrintReport">
+                    <i class="fas fa-print"></i>
+                    <span>Print Report</span>
+                </button>
+            </div>
+
+            <div class="table-container">
+                <table class="data-table row-card-table" id="historyTable">
+                    <thead>
+                        <tr>
+                            <th>Date</th>
+                            <th>Time</th>
+                            <th>Branch</th>
+                            <th>Status</th>
+                            <th>Remarks</th>
+                            <th>Actions</th>
+                            <th class="approval-card-th" aria-hidden="true"><span class="u-hidden">Card</span></th>
+                        </tr>
+                    </thead>
+<tbody id="historyTableBody">
+                        <tr>
+                            <td colspan="7" class="empty-state">
+                                <i class="fas fa-history"></i>
+                                <p>No history records yet.</p>
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+            <div class="pagination" id="historyPagination">
+                <span class="page-info">Loading...</span>
+            </div>
+        </section>
+
+        <!-- ============================================================ -->
+        <!-- TAB: TICKETS                                                 -->
+        <!-- ============================================================ -->
+        <section class="tab-content" id="tabTickets">
+
+            <!-- Bulk Action Bar -->
+            <div class="bulk-bar" id="bulkBar">
+                <span><i class="fas fa-check-square"></i> <span id="bulkCount">0</span> ticket(s) selected</span>
+                <button class="bulk-btn progress" onclick="bulkAction('progress')">Mark In Progress</button>
+                <button class="bulk-btn resolve" onclick="bulkAction('resolve')">Mark Resolved</button>
+                <button class="bulk-btn delete-bulk" onclick="bulkAction('delete')"><i class="fas fa-trash"></i> Delete</button>
+            </div>
+
+            <div class="toolbar">
+                <div class="search-box">
+                    <i class="fas fa-search"></i>
+                    <input type="text" id="ticketSearch" placeholder="Search tickets...">
+                </div>
+                <div class="sort-group">
+                    <label><i class="fas fa-filter"></i></label>
+                    <select id="ticketStatusFilter">
+                        <option value="all" selected>All Status</option>
+                        <option value="Pending">Pending</option>
+                        <option value="In Progress">In Progress</option>
+                        <option value="For Revision">For Revision</option>
+                        <option value="Insufficient Footage">Insufficient Footage</option>
+                        <option value="Pending Approval">Pending Approval</option>
+                        <option value="Resolved">Resolved</option>
+                    </select>
+                </div>
+                <div class="sort-group">
+                    <label><i class="fas fa-flag"></i></label>
+                    <select id="ticketPriorityFilter">
+                        <option value="all">All Priorities</option>
+                        <option value="Low">Low</option>
+                        <option value="High">High</option>
+                    </select>
+                </div>
+                <div class="sort-group">
+                    <label><i class="fas fa-store"></i></label>
+                    <select id="ticketBranchFilter">
+                        <option value="all">All Branches</option>
+                    </select>
+                </div>
+                <button class="btn btn-sm btn-primary" id="ticketSearchBtn"><i class="fas fa-search"></i> Search</button>
+            </div>
+
+            <div class="table-container">
+                <table class="data-table row-card-table" id="ticketTable">
+                    <thead>
+                        <tr>
+                            <th class="checkbox-cell"><input type="checkbox" id="selectAll" onchange="selectAllTickets()"></th>
+                            <th>Ticket No.</th>
+                            <th>Date Created</th>
+                            <th>Branch</th>
+                            <th>Reporter</th>
+                            <th>Incident</th>
+                            <th>Status</th>
+                            <th>Actions</th>
+                            <th class="approval-card-th" aria-hidden="true"><span class="u-hidden">Card</span></th>
+                        </tr>
+                    </thead>
+                    <tbody id="ticketList">
+                        <tr>
+                            <td colspan="9" class="empty-state">
+                                <i class="fas fa-ticket-alt"></i>
+                                <p>No tickets found.</p>
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <div class="pagination" id="paginationControls">
+                <span class="page-info">Loading...</span>
+            </div>
+        </section>
+
+        <!-- ============================================================ -->
+        <!-- TAB: VIOLATIONS REPORT (Operator + Superadmin Only)          -->
+        <!-- CCTV violations reported without a ticket/request.           -->
+        <!-- Never shown on the Owner Dashboard.                          -->
+        <!-- ============================================================ -->
+        <section class="tab-content" id="tabViolations">
+
+            <div class="section-header">
+                <div>
+                    <h2><i class="fas fa-video u-icon-primary u-icon-gap"></i>CCTV Violations Report</h2>
+                    <p style="color:var(--text-muted);font-size:0.85rem;margin-top:4px;">Violations monitored via CCTV &mdash; reported even without a request.</p>
+                </div>
+            </div>
+
+            <div class="toolbar">
+                <div class="search-box">
+                    <i class="fas fa-search"></i>
+                    <input type="text" id="violationSearch" placeholder="Search subject, store, location, reporter...">
+                </div>
+                <div class="sort-group">
+                    <label><i class="fas fa-store"></i></label>
+                    <select id="violationStoreFilter">
+                        <option value="all">All Stores</option>
+                    </select>
+                </div>
+                <div class="sort-group">
+                    <label for="violationPeriodFilter"><i class="fas fa-calendar-day"></i></label>
+                    <select id="violationPeriodFilter" title="Reports are listed by filing date — older ones stay in the database">
+                        <option value="daily" selected>Today</option>
+                        <option value="weekly">Last 7 days</option>
+                        <option value="monthly">This month</option>
+                        <option value="all">All reports</option>
+                    </select>
+                </div>
+                <div class="sort-group">
+                    <label for="violationUploadsFilter"><i class="fas fa-cloud-upload-alt"></i></label>
+                    <select id="violationUploadsFilter" title="Filter violations by whether HR has attached NOV files">
+                        <option value="all">All Reports</option>
+                        <option value="with-uploads">With NOV</option>
+                    </select>
+                </div>
+            </div>
+
+            <div class="violation-period-note" id="violationPeriodNote" hidden>
+                <i class="fas fa-circle-info"></i>
+                <span id="violationPeriodNoteText"></span>
+            </div>
+
+            <div class="table-container">
+                <table class="data-table row-card-table" id="violationTable">
+                    <thead>
+                        <tr>
+                            <th>Report No.</th>
+                            <th>Report Date</th>
+                            <th>Incident Date/Time</th>
+                            <th>Store</th>
+                            <th>Subject</th>
+                            <th>Location</th>
+                            <th>Reporter</th>
+                            <th>Files</th>
+                            <th>Actions</th>
+                            <th class="approval-card-th" aria-hidden="true"><span class="u-hidden">Card</span></th>
+                        </tr>
+                    </thead>
+                    <tbody id="violationList">
+                        <tr>
+                            <td colspan="10" class="empty-state">
+                                <i class="fas fa-video"></i>
+                                <p>No violation reports found.</p>
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <div class="pagination" id="violationPagination">
+                <span class="page-info">Loading...</span>
+            </div>
+
+            <!-- ===== REPORTS DATABASE panel (Google Drive–style browser of the Cloudinary "Data base" tree) ===== -->
+            <div class="violation-tree-panel" id="violationTreePanel">
+                <div class="violation-tree-header">
+                    <h3><i class="fas fa-database"></i> REPORTS DATABASE <span id="violationTreeCount">(0 reports &middot; 0 files)</span></h3>
+                </div>
+                <div class="violation-tree-body" id="violationTreeBody">
+                    <div class="violation-tree-body-inner">
+                        <div class="violation-toolbar">
+                            <button type="button" class="vdrive-nav-btn" id="btnViolationBack" title="Back (previous folder)" disabled>
+                                <i class="fas fa-arrow-left"></i>
+                            </button>
+                            <button type="button" class="vdrive-nav-btn" id="btnViolationHome" title="Back to the Branches folder" disabled>
+                                <i class="fas fa-house"></i>
+                            </button>
+                            <div class="violation-breadcrumb" id="violationBreadcrumb"></div>
+                        </div>
+                        <div class="violation-browser" id="violationFolderBrowser"></div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+
+        <!-- ============================================================ -->
+        <!-- TAB: TICKET APPROVALS (Superadmin Only)                     -->
+        <!-- ============================================================ -->
+        <section class="tab-content" id="tabApprovals">
+
+            <div class="section-header">
+                <div>
+                    <h2><i class="fas fa-clipboard-check u-icon-primary u-icon-gap"></i>Resolved Ticket Approvals</h2>
+                    <p class="u-section-sub">Review and approve resolved tickets before they become visible to branch users</p>
+                </div>
+            </div>
+
+            <!-- Approval summary cards -->
+            <div class="summary-cards">
+                <div class="card card-total">
+                    <div class="card-icon"><i class="fas fa-list"></i></div>
+                    <div class="card-info">
+                        <span class="card-value" id="approvalTotalCount">0</span>
+                        <span class="card-label">Total Resolved</span>
+                    </div>
+                </div>
+                <div class="card card-pending">
+                    <div class="card-icon"><i class="fas fa-hourglass-half"></i></div>
+                    <div class="card-info">
+                        <span class="card-value" id="approvalPendingCount">0</span>
+                        <span class="card-label">Pending Approval</span>
+                    </div>
+                </div>
+                <div class="card card-resolved">
+                    <div class="card-icon"><i class="fas fa-check-circle"></i></div>
+                    <div class="card-info">
+                        <span class="card-value" id="approvalApprovedCount">0</span>
+                        <span class="card-label">Approved</span>
+                    </div>
+                </div>
+                <div class="card card-outage">
+                    <div class="card-icon"><i class="fas fa-times-circle"></i></div>
+                    <div class="card-info">
+                        <span class="card-value" id="approvalRejectedCount">0</span>
+                        <span class="card-label">Rejected</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="toolbar">
+                <div class="search-box">
+                    <i class="fas fa-search"></i>
+                    <input type="text" id="approvalSearch" placeholder="Search approvals...">
+                </div>
+                <div class="sort-group">
+                    <label><i class="fas fa-filter"></i></label>
+                    <select id="approvalStatusFilter">
+                        <option value="all" selected>All</option>
+                        <option value="Pending Approval">Pending Approval</option>
+                        <option value="Approved">Approved</option>
+                        <option value="Expired">Access Expired</option>
+                        <option value="For Revision">For Revision</option>
+                    </select>
+                </div>
+                <div class="sort-group">
+                    <label><i class="fas fa-store"></i></label>
+                    <select id="approvalBranchFilter">
+                        <option value="all">All Branches</option>
+                    </select>
+                </div>
+            </div>
+
+            <div class="table-container">
+                <table class="data-table row-card-table" id="approvalTable">
+                    <thead>
+                        <tr>
+                            <th>Ticket No.</th>
+                            <th>Branch</th>
+                            <th>Incident</th>
+                            <th>Reporter</th>
+                            <th>Date Created</th>
+                            <th>Status</th>
+                            <th>Approved Date</th>
+                            <th>Access Expires</th>
+                            <th>Actions</th>
+                            <th class="approval-card-th" aria-hidden="true"><span class="u-hidden">Card</span></th>
+                        </tr>
+                    </thead>
+                    <tbody id="approvalListBody">
+                        <tr>
+                            <td colspan="10" class="empty-state">
+                                <i class="fas fa-clipboard-check"></i>
+                                <p>No approval tickets found.</p>
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <div class="pagination" id="approvalPagination">
+                <span class="page-info">Loading...</span>
+            </div>
+        </section>
+
+
+        <!-- ============================================================ -->
+        <!-- TAB: USER MANAGEMENT (Superadmin Only)                     -->
+        <!-- ============================================================ -->
+        <section class="tab-content" id="tabUsers">
+            <div class="section-header">
+                <div>
+                    <h2><i class="fas fa-users-cog u-icon-primary u-icon-gap"></i>Pending Approvals</h2>
+                    <p class="u-section-sub">Review newly created owner accounts and approve or reject them.</p>
+                </div>
+                <div style="display:flex;align-items:center;gap:10px;">
+                    <div class="filter-group">
+                        <select id="userStatusFilter" title="Filter by status">
+                            <option value="all">All Users</option>
+                            <option value="pending">Pending</option>
+                            <option value="approved">Approved</option>
+                            <option value="rejected">Rejected</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+
+            <div class="table-container">
+                <table class="data-table row-card-table" id="usersTable">
+                    <thead>
+                        <tr>
+                            <th>User</th>
+                            <th>Name</th>
+                            <th>Role</th>
+                            <th>Requested Branches</th>
+                            <th>Status</th>
+                            <th></th>
+                            <th class="approval-card-th" aria-hidden="true"><span class="u-hidden">Card</span></th>
+                        </tr>
+                    </thead>
+                    <tbody id="usersListBody">
+                        <tr><td colspan="7" class="empty-state"><em>No pending approvals.</em></td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </section>
+
+        <!-- ============================================================ -->
+        <!-- PRINTABLE MONTHLY REPORT (hidden, shown only during print)   -->
+        <!-- ============================================================ -->
+        <div id="printableReport">
+            <!-- Same end-to-end letterhead banner used by the Violations report
+                 (landscape, full-bleed). If the image cannot load, the onerror
+                 hides it and reveals the built-in text-only header below, so the
+                 print is never headless. -->
+            <img class="print-banner" src="print%20history%20Header.png" alt="Jiangnan Command Center"
+                 onerror="this.style.display='none';document.getElementById('printTextHeader').style.display='flex';">
+            <!-- Text-only letterhead fallback (shown only when the banner fails) -->
+            <div class="print-header u-hidden" id="printTextHeader">
+                <div class="print-brand">
+                    <div class="print-logo">
+                        <img src="logo.png" alt="Jiangnan CCTV Logo">
+                    </div>
+                    <div class="print-brand-text">
+                        <h2>Jiangnan Hotpot</h2>
+                        <p>Branch Monitoring &amp; Incident Ticketing</p>
+                    </div>
+                </div>
+            </div>
+            <div class="print-title-block">
+                <h1>Monthly Status Report</h1>
+                <p id="printReportPeriod" class="print-period">—</p>
+            </div>
+            <table class="print-table" id="printReportTable">
+                <thead>
+                    <tr>
+                        <th>Branch Name</th>
+                        <th>Total downtime</th>
+                        <th>Incident count</th>
+                        <th>Date &amp; Time Offline</th>
+                        <th>Date &amp; Time Restored</th>
+                        <th>Duration</th>
+                        <th>Uptime</th>
+                        <th>Remarks</th>
+                    </tr>
+                </thead>
+                <tbody id="printReportBody">
+                    <!-- Populated dynamically by printMonthlyReport() -->
+                </tbody>
+            </table>
+            <div class="print-footer">
+                <span>Generated on <span id="printGeneratedDate">—</span></span>
+                <span>Jiangnan CCTV Command Center</span>
+            </div>
+        </div>
+
+    <!-- ============================================================ -->
+    <!-- HANGING PLUS BUTTON - Report Violation (PHONE ONLY)           -->
+    <!-- The classic header that holds #btnNewViolation is hidden on   -->
+    <!-- phones now (the Option-2 header takes over every tab) and     -->
+    <!-- #tabViolations has no in-tab trigger, so this is the phone    -->
+    <!-- entry point. Wired in script.js (initOption2MobileHeader) to  -->
+    <!-- click the real button. Hidden on desktop by the page rules.   -->
+    <!-- ============================================================ -->
+    <button type="button" id="jn2ReportFab" class="jn2-fab fixed bottom-5 right-4 z-40 w-14 h-14 items-center justify-center bg-emerald-600 hover:bg-emerald-500 text-white rounded-full shadow-lg shadow-emerald-950/40 active:scale-95 transition-all" aria-label="Report Violation" title="Report Violation">
+        <i class="fa-solid fa-plus text-xl"></i>
+    </button>
+
+    </main>
+
+    <!-- ============================================================ -->
+    <!-- MODAL: ADD STATUS UPDATE                                     -->
+    <!-- ============================================================ -->
+    <div class="modal-overlay" id="addModal">
+        <div class="modal-container">
+            <div class="modal-header">
+                <h2><i class="fas fa-pen"></i> Add Status Update</h2>
+                <button class="modal-close" id="closeAddModal">&times;</button>
+            </div>
+            <div class="modal-body">
+                <form id="addStatusForm">
+                    <div class="form-group">
+                        <label for="branchSelect">Branch</label>
+                        <div style="display:flex;gap:8px;align-items:center;">
+                            <select id="branchSelect" required style="flex:1;">
+                                <option value="">— Select Branch —</option>
+                            </select>
+                            <button type="button" class="btn btn-sm btn-add-branch" id="btnAddBranch" style="padding:10px 14px;background:var(--color-primary-bg);color:var(--color-primary);border:1px solid rgba(114,191,106,0.4);border-radius:var(--radius-md);font-size:0.82rem;font-weight:600;white-space:nowrap;transition:var(--transition);display:flex;align-items:center;gap:4px;">
+                                <i class="fas fa-plus"></i> New
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="form-group u-hidden" id="newBranchGroup">
+                        <label for="newBranchInput">New Branch Name</label>
+                        <input type="text" id="newBranchInput" placeholder="Enter new branch name...">
+                    </div>
+
+                    <div class="form-group">
+                        <label>Status</label>
+                        <div class="status-segmented-group" id="statusSegmentedGroup">
+                            <button type="button" class="segmented-btn" data-status="Online">
+                                <i class="fas fa-check-circle"></i> Online
+                            </button>
+                            <button type="button" class="segmented-btn" data-status="Offline">
+                                <i class="fas fa-times-circle"></i> Offline
+                            </button>
+                        </div>
+                        <input type="hidden" id="statusSelect" value="" required>
+                    </div>
+
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="dateInput">Date</label>
+                            <input type="date" id="dateInput" required>
+                        </div>
+                        <div class="form-group">
+                            <label for="timeInput">Time</label>
+                            <input type="time" id="timeInput" required>
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="remarksInput">Remarks</label>
+                        <textarea id="remarksInput" rows="3" placeholder="Optional remarks..."></textarea>
+                    </div>
+
+                    <div class="validation-warning u-hidden" id="validationWarning">
+                        <i class="fas fa-exclamation-circle"></i>
+                        <span id="validationMessage"></span>
+                    </div>
+
+                    <div class="form-actions">
+                        <button type="button" class="btn btn-secondary" id="cancelAdd">Cancel</button>
+                        <button type="submit" class="btn btn-primary"><i class="fas fa-save"></i> Save Update</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- ============================================================ -->
+    <!-- MODAL: VIEW BRANCH                                           -->
+    <!-- ============================================================ -->
+    <div class="modal-overlay" id="viewModal">
+        <div class="modal-container modal-lg">
+            <div class="modal-header">
+                <h2><i class="fas fa-eye"></i> <span id="viewBranchName">Branch Details</span></h2>
+                <button class="modal-close" id="closeViewModal">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="view-summary">
+                    <div class="view-stat">
+                        <span class="view-stat-label">Current Status</span>
+                        <span class="view-stat-value" id="viewCurrentStatus">—</span>
+                    </div>
+                    <div class="view-stat">
+                        <span class="view-stat-label">Last Updated</span>
+                        <span class="view-stat-value" id="viewLastUpdated">—</span>
+                    </div>
+                    <div class="view-stat">
+                        <span class="view-stat-label">Remarks</span>
+                        <span class="view-stat-value" id="viewRemarks">—</span>
+                    </div>
+                    <div class="view-stat">
+                        <span class="view-stat-label">Current Downtime</span>
+                        <span class="view-stat-value" id="viewDowntime">—</span>
+                    </div>
+                </div>
+
+                <h3 class="section-title"><i class="fas fa-chart-bar"></i> Monthly Statistics</h3>
+                <div class="monthly-stats">
+                    <div class="stat-card"><span class="stat-number" id="statOutages">0</span><span class="stat-desc">Outages</span></div>
+                    <div class="stat-card"><span class="stat-number" id="statTotalDowntime">0h 0m</span><span class="stat-desc">Total Downtime</span></div>
+                    <div class="stat-card"><span class="stat-number" id="statLongestOutage">0h 0m</span><span class="stat-desc">Longest Outage</span></div>
+                    <div class="stat-card"><span class="stat-number" id="statAvgOutage">0h 0m</span><span class="stat-desc">Avg Outage</span></div>
+                    <div class="stat-card"><span class="stat-number" id="statAvailability">100%</span><span class="stat-desc">Availability</span></div>
+                </div>
+
+                <h3 class="section-title"><i class="fas fa-list"></i> Update History</h3>
+                <div class="table-container view-history-table">
+                    <table class="data-table">
+                        <thead><tr><th>Date</th><th>Time</th><th>Status</th><th>Remarks</th></tr></thead>
+                        <tbody id="viewHistoryBody">
+                            <tr><td colspan="4" class="empty-state">No history records.</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ============================================================ -->
+    <!-- MODAL: TICKET DETAILS                                        -->
+    <!-- ============================================================ -->
+    <div class="modal-overlay" id="ticketModal">
+        <div class="modal-container modal-lg">
+            <div class="modal-header">
+                <h2><i class="fas fa-ticket-alt"></i> <span id="modalTicketTitle">Ticket Details</span></h2>
+                <button class="modal-close" id="closeTicketModal">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="modal-fields" id="ticketModalBody">
+                    <p style="color:var(--text-muted);">Loading...</p>
+                </div>
+
+<!-- ===== Submitted Files (images/videos from the requester) ===== -->
+                <div class="ticket-attachments-section" id="ticketAttachmentsSection" style="margin-top:22px;">
+                    <h3 class="section-title"><i class="fas fa-paperclip"></i> Submitted Files <span style="font-weight:400;text-transform:none;font-size:0.8rem;color:var(--text-muted);">(images &amp; videos uploaded by the requester)</span></h3>
+                    <div id="ticketAttachmentsGrid" class="attachments-grid">
+                        <p class="u-section-sub">No attachments yet.</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ============================================================ -->
+    <!-- MODAL: VIOLATION REPORT DETAILS (Operator + Superadmin)      -->
+    <!-- ============================================================ -->
+    <div class="modal-overlay" id="violationModal">
+        <div class="modal-container modal-lg">
+            <div class="modal-header">
+                <h2><i class="fas fa-video"></i> <span id="violationModalTitle">Violation Report</span></h2>
+                <button type="button" class="btn btn-sm btn-secondary violation-report-btn" id="btnGenerateViolationReport" title="The PDF is auto-saved to Cloudinary when the report is submitted — use this to re-generate and download it">
+                    <i class="fas fa-file-pdf"></i> <span>Generate Report</span>
+                </button>
+                <button class="modal-close" id="closeViolationModal">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="modal-fields" id="violationModalBody">
+                    <p style="color:var(--text-muted);">Loading...</p>
+                </div>
+
+                <div class="ticket-attachments-section" style="margin-top:22px;">
+                    <h3 class="section-title"><i class="fas fa-paperclip"></i> CCTV Footage / Evidence <span style="font-weight:400;text-transform:none;font-size:0.8rem;color:var(--text-muted);">(stored on the Violations Cloudinary account)</span></h3>
+                    <div id="violationAttachmentsGrid" class="attachments-grid">
+                        <p class="u-section-sub">No attachments yet.</p>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer u-hidden" id="violationModalFooter">
+                <button type="button" class="btn btn-danger" id="btnDeleteViolation"><i class="fas fa-trash"></i> Delete</button>
+                <!-- HR handoff. Superadmin-only (script.js hides it for operators).
+                     The label and icon are swapped by JS depending on whether the
+                     report is currently on HR's list, so the same button performs
+                     both the transfer and its undo. -->
+                <button type="button" class="btn btn-success u-hidden" id="btnTransferViolation" style="display:none;" title="Send this report to HR so they can write the incident report">
+                    <i class="fas fa-share-nodes" id="btnTransferViolationIcon"></i> <span id="btnTransferViolationLabel">Transfer to HR</span>
+                </button>
+                <!-- ===== AREA MANAGER HANDOFF =====
+                     A SECOND, INDEPENDENT transfer. This stamps
+                     `managerStatus: 'transferred'` (see firebase.js) while the HR
+                     button above stamps `hrStatus` — so one report can sit on
+                     HR's list, the Area Manager's list, or BOTH at once. Reusing
+                     the single `hrStatus` field would make this button silently
+                     revoke an existing HR transfer.
+
+                     It also uses its own id/icon/label triples. The HR button
+                     swaps ITS label to "Revert Transfer" when the report is
+                     already transferred; sharing any of these three elements
+                     would make the two buttons overwrite each other's state. -->
+                <button type="button" class="btn btn-success u-hidden" id="btnTransferViolationToManager" style="display:none;" title="Send this report to the Area Manager so they can review it for their branches">
+                    <i class="fas fa-share-nodes" id="btnTransferViolationToManagerIcon"></i> <span id="btnTransferViolationToManagerLabel">Transfer to Area Manager</span>
+                </button>
+                <button type="button" class="btn btn-primary" id="btnEditViolation"><i class="fas fa-edit"></i> Edit Report</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ============================================================ -->
+    <!-- MODAL: VIOLATION REPORT FORM (Add / Edit)                    -->
+    <!-- ============================================================ -->
+    <div class="modal-overlay" id="violationFormModal">
+        <div class="modal-container modal-lg">
+            <div class="modal-header">
+                <h2><i class="fas fa-exclamation-triangle" style="color:#f59e0b;"></i> <span id="violationFormTitle">Report Violation</span></h2>
+                <button class="modal-close" id="closeViolationFormModal">&times;</button>
+            </div>
+            <div class="modal-body">
+                <form id="violationForm">
+                    <input type="hidden" id="violationFormId">
+                    <div class="form-group">
+                        <label for="violationStore">Store <span style="color:var(--color-danger);">*</span></label>
+                        <select id="violationStore" required>
+                            <option value="">&mdash; Select Store &mdash;</option>
+                        </select>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="violationSubject">Subject <span style="color:var(--color-danger);">*</span></label>
+                        <input type="text" id="violationSubject" placeholder="e.g. Employee sleeping at post" required>
+                    </div>
+
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="violationIncidentDate">Incident Date <span style="color:var(--color-danger);">*</span></label>
+                            <input type="date" id="violationIncidentDate" required>
+                        </div>
+                        <div class="form-group">
+                            <label for="violationIncidentTime">Incident Time <span style="color:var(--color-danger);">*</span></label>
+                            <input type="time" id="violationIncidentTime" required>
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="violationLocation">Location <span style="color:var(--color-danger);">*</span></label>
+                        <input type="text" id="violationLocation" placeholder="e.g. Entrance Gate 3 / CCTV Cam 07" required>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="violationDetails">Details of Observation <span style="color:var(--color-danger);">*</span></label>
+                        <textarea id="violationDetails" rows="5" placeholder="Describe what was observed on the CCTV footage..." required style="min-height:120px;"></textarea>
+                    </div>
+
+                    <div class="form-group">
+                        <label><i class="fas fa-cloud-upload-alt u-icon-primary u-icon-gap-sm"></i> CCTV Footage / Evidence (optional)</label>
+                        <div class="upload-widget" id="violationUploadWidget">
+                            <label class="upload-dropzone" id="violationDropzone">
+                                <i class="fas fa-cloud-upload-alt"></i>
+                                <span class="upload-dropzone-text">Click to choose files or drag &amp; drop here</span>
+                                <span class="upload-dropzone-hint">Images, video, PDF, Office, ZIP &middot; up to 100MB &middot; saved as &ldquo;Data base/Branches/&lt;Store&gt;/&lt;Month&gt;/&lt;Reporter&gt;/&lt;Subject&gt; - &lt;Date&gt;/attachments&rdquo;</span>
+                                <input type="file" id="violationAttachmentInput" multiple
+                                       accept="image/*,video/*,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.zip">
+                            </label>
+                            <div class="upload-file-list" id="violationFileList"></div>
+                            <div class="upload-progress-wrap" id="violationUploadProgressWrap">
+                                <div class="upload-spinner"><i class="fas fa-circle-notch fa-spin"></i></div>
+                                <div class="upload-progress">
+                                    <div class="upload-progress-bar" id="violationUploadProgressBar"></div>
+                                </div>
+                                <span class="upload-progress-text" id="violationUploadProgressText">0%</span>
+                            </div>
+                            <span class="attachment-upload-status" id="violationUploadStatus"></span>
+                        </div>
+                    </div>
+
+                    <div class="validation-warning u-hidden" id="violationFormWarning">
+                        <i class="fas fa-exclamation-circle"></i>
+                        <span id="violationFormWarningMsg"></span>
+                    </div>
+
+                    <div class="form-actions">
+                        <button type="button" class="btn btn-secondary" id="cancelViolationForm">Cancel</button>
+                        <button type="submit" class="btn btn-primary" id="btnSubmitViolation"><i class="fas fa-paper-plane"></i> Submit Report</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- ============================================================ -->
+    <!-- MODAL: EDIT TICKET                                           -->
+    <!-- ============================================================ -->
+    <div class="modal-overlay" id="editTicketModal">
+        <div class="modal-container modal-lg">
+            <div class="modal-header">
+                <h2><i class="fas fa-edit"></i> <span id="editModalTitle">Edit Ticket</span></h2>
+                <button class="modal-close" id="closeEditModal">&times;</button>
+            </div>
+            <div class="modal-body">
+                <input type="hidden" id="editTicketId">
+                <div class="modal-fields">
+                    <div class="modal-field">
+                        <label>Branch</label>
+                        <select id="editBranch" style="width:100%;padding:8px 12px;background:var(--bg-input);border:1px solid var(--border-color);border-radius:6px;color:var(--text-primary);font-family:inherit;font-size:13px;"></select>
+                    </div>
+                    <div class="modal-field">
+                        <label>Priority</label>
+                        <select id="editPriority" style="width:100%;padding:8px 12px;background:var(--bg-input);border:1px solid var(--border-color);border-radius:6px;color:var(--text-primary);font-family:inherit;font-size:13px;">
+                            <option value="Low">Low</option>
+                            <option value="High">High</option>
+                        </select>
+                    </div>
+                    <div class="modal-field">
+                        <label>Reporter Name</label>
+                        <input type="text" id="editName" style="width:100%;padding:8px 12px;background:var(--bg-input);border:1px solid var(--border-color);border-radius:6px;color:var(--text-primary);font-family:inherit;font-size:13px;">
+                    </div>
+                    <div class="modal-field">
+                        <label>Position</label>
+                        <input type="text" id="editPosition" style="width:100%;padding:8px 12px;background:var(--bg-input);border:1px solid var(--border-color);border-radius:6px;color:var(--text-primary);font-family:inherit;font-size:13px;">
+                    </div>
+                    <div class="modal-field">
+                        <label>Contact Number</label>
+                        <input type="text" id="editContact" style="width:100%;padding:8px 12px;background:var(--bg-input);border:1px solid var(--border-color);border-radius:6px;color:var(--text-primary);font-family:inherit;font-size:13px;">
+                    </div>
+                    <div class="modal-field">
+                        <label>Email</label>
+                        <input type="text" id="editEmail" style="width:100%;padding:8px 12px;background:var(--bg-input);border:1px solid var(--border-color);border-radius:6px;color:var(--text-primary);font-family:inherit;font-size:13px;">
+                    </div>
+                    <div class="modal-field">
+                        <label>Incident Date</label>
+                        <input type="text" id="editDatetime" style="width:100%;padding:8px 12px;background:var(--bg-input);border:1px solid var(--border-color);border-radius:6px;color:var(--text-primary);font-family:inherit;font-size:13px;">
+                    </div>
+                    <div class="modal-field">
+                        <label>Location</label>
+                        <input type="text" id="editLocation" style="width:100%;padding:8px 12px;background:var(--bg-input);border:1px solid var(--border-color);border-radius:6px;color:var(--text-primary);font-family:inherit;font-size:13px;">
+                    </div>
+                    <div class="modal-field">
+                        <label>Incident Type</label>
+                        <input type="text" id="editIncident" style="width:100%;padding:8px 12px;background:var(--bg-input);border:1px solid var(--border-color);border-radius:6px;color:var(--text-primary);font-family:inherit;font-size:13px;">
+                    </div>
+                    <div class="modal-field">
+                        <label>Status</label>
+                        <select id="editStatus" style="width:100%;padding:8px 12px;background:var(--bg-input);border:1px solid var(--border-color);border-radius:6px;color:var(--text-primary);font-family:inherit;font-size:13px;">
+                            <option value="Pending">Pending</option>
+                            <option value="In Progress">In Progress</option>
+                            <option value="For Revision">For Revision</option>
+                            <option value="Resolved">Resolved</option>
+                        </select>
+                    </div>
+                    <div class="modal-field full-width">
+                        <label>Description</label>
+                        <textarea id="editDescription" rows="3" style="width:100%;padding:8px 12px;background:var(--bg-input);border:1px solid var(--border-color);border-radius:6px;color:var(--text-primary);font-family:inherit;font-size:13px;resize:vertical;"></textarea>
+                    </div>
+                </div>
+                <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:20px;padding-top:16px;border-top:1px solid var(--border-color);">
+                    <button class="btn btn-secondary" onclick="closeTicketModals()">Cancel</button>
+                    <button class="btn btn-primary" onclick="saveEditTicket()"><i class="fas fa-save"></i> Save Changes</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ============================================================ -->
+    <!-- MODAL: EDIT HISTORY                                         -->
+    <!-- ============================================================ -->
+    <div class="modal-overlay" id="editHistoryModal">
+        <div class="modal-container">
+            <div class="modal-header">
+                <h2><i class="fas fa-edit"></i> Edit History Record</h2>
+                <button class="modal-close" id="closeEditHistoryModal">&times;</button>
+            </div>
+            <div class="modal-body">
+                <form id="editHistoryForm">
+                    <input type="hidden" id="editHistoryId">
+
+                    <div class="form-group">
+                        <label for="editHistoryBranch">Branch</label>
+                        <select id="editHistoryBranch" required>
+                            <option value="">— Select Branch —</option>
+                        </select>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="editHistoryStatus">Status</label>
+                        <select id="editHistoryStatus" required>
+                            <option value="">— Select Status —</option>
+                            <option value="Online">Online</option>
+                            <option value="Offline">Offline</option>
+                        </select>
+                    </div>
+
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="editHistoryDate">Date</label>
+                            <input type="date" id="editHistoryDate" required>
+                        </div>
+                        <div class="form-group">
+                            <label for="editHistoryTime">Time</label>
+                            <input type="time" id="editHistoryTime" required>
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="editHistoryRemarks">Remarks</label>
+                        <textarea id="editHistoryRemarks" rows="3" placeholder="Optional remarks..."></textarea>
+                    </div>
+
+                    <div class="form-actions">
+                        <button type="button" class="btn btn-secondary" id="cancelEditHistory">Cancel</button>
+                        <button type="submit" class="btn btn-primary"><i class="fas fa-save"></i> Save Changes</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+<!-- ============================================================ -->
+    <!-- MODAL: BRANCH LIST MANAGEMENT                               -->
+    <!-- ============================================================ -->
+    <div class="modal-overlay" id="branchListModal">
+        <div class="modal-container modal-lg">
+            <div class="modal-header">
+                <h2><i class="fas fa-code-branch"></i> Manage Branches</h2>
+                <button class="modal-close" id="closeBranchListModal">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div style="display:flex;gap:12px;margin-bottom:18px;">
+                    <input type="text" id="newBranchNameInput" placeholder="Enter new branch name..." style="flex:1;padding:10px 14px;background:var(--bg-input);border:1px solid var(--border-color);border-radius:var(--radius-md);color:var(--text-primary);font-family:inherit;font-size:0.9rem;">
+                    <button class="btn btn-primary" id="btnAddNewBranch"><i class="fas fa-plus"></i> Add Branch</button>
+                </div>
+                <div class="table-container">
+                    <table class="data-table">
+                        <thead>
+                            <tr><th>Branch Name</th><th>Status</th><th>Actions</th></tr>
+                        </thead>
+                        <tbody id="branchListBody">
+                            <tr><td colspan="3" class="empty-state"><i class="fas fa-database"></i><p>No branches.</p></td></tr>
+                        </tbody>
+                    </table>
+                </div>
+                <div class="form-actions">
+                    <button type="button" class="btn btn-secondary" id="closeBranchListBtn">Close</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ============================================================ -->
+    <!-- MODAL: APPROVAL DETAILS                                      -->
+    <!-- ============================================================ -->
+    <div class="modal-overlay" id="approvalDetailsModal">
+        <div class="modal-container modal-xl">
+            <div class="modal-header">
+                <h2><i class="fas fa-clipboard-check" style="color:var(--color-primary);"></i> <span id="approvalDetailsTitle">Approval Details</span></h2>
+                <div style="display:flex;align-items:center;gap:12px;">
+                    <span class="status-badge u-hidden" id="approvalDetailsStatus">Pending Approval</span>
+                    <button class="modal-close" id="closeApprovalDetails">&times;</button>
+                </div>
+            </div>
+            <div class="modal-body">
+                <!-- ===== Two-section review: Manager's Request vs Operator's Resolution ===== -->
+                <div class="approval-review-grid" id="approvalDetailsBody">
+                    <p style="color:var(--text-muted);">Loading...</p>
+                </div>
+
+                <!-- ===== Superadmin tools: attach additional evidence to the resolution ===== -->
+                <div class="ticket-attachments-section" id="approvalAttachmentsSection" style="margin-top:22px;">
+                    <h3 class="section-title"><i class="fas fa-paperclip"></i> Additional Evidence <span style="font-weight:400;text-transform:none;font-size:0.8rem;color:var(--text-muted);">(Superadmin &middot; attached to the operator's resolution)</span></h3>
+<div class="upload-widget">
+                        <label class="upload-dropzone" id="approvalDropzone">
+                            <i class="fas fa-cloud-upload-alt"></i>
+                            <span class="upload-dropzone-text">Click to choose files or drag &amp; drop here</span>
+                            <span class="upload-dropzone-hint">Images, video, PDF, Office, ZIP &middot; up to 100MB</span>
+                            <input type="file" id="approvalAttachmentInput" multiple
+                                   accept="image/*,video/*,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.zip">
+                        </label>
+                        <div class="upload-file-list" id="approvalFileList"></div>
+                        <div class="upload-progress-wrap" id="approvalUploadProgressWrap">
+                            <div class="upload-spinner"><i class="fas fa-circle-notch fa-spin"></i></div>
+                            <div class="upload-progress">
+                                <div class="upload-progress-bar" id="approvalUploadProgressBar"></div>
+                            </div>
+                            <span class="upload-progress-text" id="approvalUploadProgressText">0%</span>
+                        </div>
+                        <div class="upload-actions">
+                            <button type="button" class="btn btn-sm btn-primary btn-upload-now" id="btnUploadApprovalAttachment">
+                                <i class="fas fa-cloud-upload-alt"></i> Upload
+                            </button>
+                            <span class="attachment-upload-status" id="approvalUploadStatus"></span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ===== Footer: final approval actions (Superadmin) ===== -->
+            <!-- ⚠️ #btnResendAccess ships with .u-hidden on purpose: it must stay
+                 invisible unless the open ticket is EXPIRED **and** has a pending
+                 re-access request. It is revealed with a real display value
+                 (see script.js) — assigning '' would hand control back to
+                 .u-hidden and the button would never appear. -->
+            <div class="modal-footer u-hidden" id="approvalModalFooter">
+                <button type="button" class="btn btn-primary u-hidden" id="btnResendAccess"><i class="fas fa-check-double"></i> Approve Request &amp; Resend</button>
+                <button type="button" class="btn btn-danger" id="btnRejectApproval"><i class="fas fa-times"></i> Reject Report</button>
+                <button type="button" class="btn btn-success" id="btnTransferToHr"><i class="fas fa-user-shield"></i> Transfer to HR</button>
+                <button type="button" class="btn btn-primary" id="btnTransferToStore"><i class="fas fa-store"></i> Transfer to Store</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ============================================================ -->
+    <!-- MODAL: EDIT APPROVAL INFORMATION (Superadmin)                -->
+    <!-- ============================================================ -->
+    <div class="modal-overlay" id="editApprovalModal">
+        <div class="modal-container">
+            <div class="modal-header">
+                <h2><i class="fas fa-clipboard-check" style="color:var(--color-primary);"></i> <span id="editApprovalTitle">Edit Approval Information</span></h2>
+                <button class="modal-close" id="closeEditApprovalModal">&times;</button>
+            </div>
+            <div class="modal-body">
+                <input type="hidden" id="editApprovalTicketId">
+                <p style="color:var(--text-muted);font-size:0.85rem;margin-bottom:18px;line-height:1.5;">
+                    Update the resolution details for this approval request before deciding to approve or reject.
+                </p>
+                <div class="form-group">
+                    <label for="editApprovalNotes">Resolution Notes</label>
+                    <textarea id="editApprovalNotes" rows="5" placeholder="Edit the resolution notes..." style="min-height:120px;"></textarea>
+                </div>
+                <div class="form-group">
+                    <label for="editApprovalAttachmentInput"><i class="fas fa-cloud-upload-alt u-icon-primary u-icon-gap-sm"></i> Resolution Attachment (optional)</label>
+<div class="upload-widget">
+                        <label class="upload-dropzone" id="editApprovalDropzone">
+                            <i class="fas fa-cloud-upload-alt"></i>
+                            <span class="upload-dropzone-text">Click to choose files or drag &amp; drop here</span>
+                            <span class="upload-dropzone-hint">Images, video, PDF, Office, ZIP &middot; up to 100MB</span>
+<input type="file" id="editApprovalAttachmentInput" multiple accept="image/*,video/*,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.zip">
+                        </label>
+                        <div class="upload-file-list" id="editApprovalFileList"></div>
+                        <div class="upload-progress-wrap" id="editApprovalUploadProgressWrap">
+                            <div class="upload-spinner"><i class="fas fa-circle-notch fa-spin"></i></div>
+                            <div class="upload-progress">
+                                <div class="upload-progress-bar" id="editApprovalUploadProgressBar"></div>
+                            </div>
+                            <span class="upload-progress-text" id="editApprovalUploadProgressText">0%</span>
+                        </div>
+                        <div class="upload-actions">
+                            <button type="button" class="btn btn-sm btn-primary btn-upload-now" id="btnUploadEditApprovalAttachment">
+                                <i class="fas fa-cloud-upload-alt"></i> Upload
+                            </button>
+                            <span class="attachment-upload-status" id="editApprovalUploadStatus"></span>
+                        </div>
+                    </div>
+                </div>
+                <div class="validation-warning u-hidden" id="editApprovalError">
+                    <i class="fas fa-exclamation-circle"></i>
+                    <span>Please enter resolution notes.</span>
+                </div>
+                <div class="form-actions">
+                    <button type="button" class="btn btn-secondary" id="cancelEditApproval">Cancel</button>
+                    <button type="button" class="btn btn-primary" id="saveApprovalInfoBtn"><i class="fas fa-save"></i> Save Approval Information</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ============================================================ -->
+    <!-- MODAL: RESOLVE TICKET (Agent / Operator)                     -->
+    <!-- ============================================================ -->
+    <div class="modal-overlay" id="resolveModal">
+        <div class="modal-container">
+            <div class="modal-header">
+                <h2><i class="fas fa-check-circle" style="color:var(--color-resolved);"></i> <span id="resolveModalTitle">Resolve Ticket</span></h2>
+                <button class="modal-close" id="closeResolveModal">&times;</button>
+            </div>
+            <div class="modal-body">
+                <p style="color:var(--text-muted);font-size:0.85rem;margin-bottom:18px;line-height:1.5;">
+                    Enter the resolution notes and optionally attach evidence. The resolution will be sent to the
+                    <strong>Superadmin for approval</strong> before it is shown to branch users as <em>Resolved</em>.
+                </p>
+                <div class="form-group">
+                    <label for="resolutionNotes">Resolution Notes <span style="color:var(--color-danger);">*</span></label>
+                    <textarea id="resolutionNotes" rows="4" placeholder="Describe what was done to resolve this ticket..." style="min-height:110px;"></textarea>
+                </div>
+<div class="form-group">
+<label for="resolveAttachmentInput"><i class="fas fa-cloud-upload-alt u-icon-primary u-icon-gap-sm"></i> Resolution Attachment (optional)</label>
+<div class="upload-widget">
+                <label class="upload-dropzone" id="resolveDropzone" data-auto-upload="true">
+                            <i class="fas fa-cloud-upload-alt"></i>
+                            <span class="upload-dropzone-text">Click to choose files or drag &amp; drop here</span>
+                            <span class="upload-dropzone-hint">Images, video, PDF, Office, ZIP &middot; up to 100MB</span>
+<input type="file" id="resolveAttachmentInput" multiple accept="image/*,video/*,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.zip">
+                        </label>
+                        <div class="upload-file-list" id="resolveFileList"></div>
+                        <div class="upload-progress-wrap" id="resolveUploadProgressWrap">
+                            <div class="upload-spinner"><i class="fas fa-circle-notch fa-spin"></i></div>
+                            <div class="upload-progress">
+                                <div class="upload-progress-bar" id="resolveUploadProgressBar"></div>
+                            </div>
+                            <span class="upload-progress-text" id="resolveUploadProgressText">0%</span>
+                        </div>
+                        <div class="upload-actions">
+                            <span class="attachment-upload-status" id="resolveUploadStatus"></span>
+                        </div>
+                    </div>
+                </div>
+                <div class="form-actions">
+                    <button type="button" class="btn btn-secondary" id="cancelResolve">Cancel</button>
+                    <button type="button" class="btn btn-primary" id="submitResolutionBtn"><i class="fas fa-paper-plane"></i> Submit for Approval</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ============================================================ -->
+    <!-- MODAL: REVISE & RESUBMIT (Operator / For Revision tickets)  -->
+    <!-- ============================================================ -->
+    <div class="modal-overlay" id="revisionModal">
+        <div class="modal-container">
+            <div class="modal-header">
+                <h2><i class="fas fa-undo-alt" style="color:var(--color-danger);"></i> <span id="revisionModalTitle">Revise Resolution</span></h2>
+                <button class="modal-close" id="closeRevisionModal">&times;</button>
+            </div>
+            <div class="modal-body">
+                <p style="color:var(--text-muted);font-size:0.85rem;margin-bottom:18px;line-height:1.5;">
+                    This resolution was sent back for revision. Review the reason below, update the
+                    resolution notes, and resubmit for <strong>Superadmin approval</strong>.
+                </p>
+
+                <!-- Rejection reason box -->
+                <div class="rejection-reason-box" id="revisionRejectionBox" style="grid-column:auto;margin-bottom:18px;">
+                    <i class="fas fa-exclamation-circle"></i>
+                    <div>
+                        <strong>Rejection Reason</strong>
+                        <p id="revisionRejectionReason">—</p>
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label for="revisionNotes">Updated Resolution Notes <span style="color:var(--color-danger);">*</span></label>
+                    <textarea id="revisionNotes" rows="4" placeholder="Describe the revised resolution..." style="min-height:110px;"></textarea>
+                </div>
+
+<div class="form-group">
+                    <label for="revisionAttachmentInput"><i class="fas fa-cloud-upload-alt u-icon-primary u-icon-gap-sm"></i> Updated Resolution Attachment (optional)</label>
+                    <div class="ticket-attachments-section" style="margin-bottom:12px;">
+                        <h3 class="section-title" style="font-size:0.85rem;margin-bottom:8px;"><i class="fas fa-paperclip"></i> Existing Attachments</h3>
+                        <div id="revisionAttachmentsGrid" class="attachments-grid">
+                            <p class="u-section-sub">No existing attachments.</p>
+                        </div>
+                    </div>
+<div class="upload-widget">
+                <label class="upload-dropzone" id="revisionDropzone" data-auto-upload="true">
+                            <i class="fas fa-cloud-upload-alt"></i>
+                            <span class="upload-dropzone-text">Click to choose files or drag &amp; drop here</span>
+                            <span class="upload-dropzone-hint">Images, video, PDF, Office, ZIP &middot; up to 100MB</span>
+<input type="file" id="revisionAttachmentInput" multiple accept="image/*,video/*,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.zip">
+                        </label>
+                        <div class="upload-file-list" id="revisionFileList"></div>
+                        <div class="upload-progress-wrap" id="revisionUploadProgressWrap">
+                            <div class="upload-spinner"><i class="fas fa-circle-notch fa-spin"></i></div>
+                            <div class="upload-progress">
+                                <div class="upload-progress-bar" id="revisionUploadProgressBar"></div>
+                            </div>
+                            <span class="upload-progress-text" id="revisionUploadProgressText">0%</span>
+                        </div>
+                        <div class="upload-actions">
+                            <span class="attachment-upload-status" id="revisionUploadStatus"></span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="validation-warning u-hidden" id="revisionError">
+                    <i class="fas fa-exclamation-circle"></i>
+                    <span>Please enter the updated resolution notes.</span>
+                </div>
+
+                <div class="form-actions">
+                    <button type="button" class="btn btn-secondary" id="cancelRevision">Cancel</button>
+                    <button type="button" class="btn btn-primary" id="submitRevisionBtn"><i class="fas fa-redo-alt"></i> Resubmit for Approval</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ============================================================ -->
+    <!-- MODAL: REJECT TICKET (Superadmin)                            -->
+    <!-- ============================================================ -->
+    <div class="modal-overlay" id="rejectModal">
+        <div class="modal-container">
+            <div class="modal-header">
+                <h2><i class="fas fa-times-circle" style="color:var(--color-danger);"></i> Reject Resolution</h2>
+                <button class="modal-close" id="closeRejectModal">&times;</button>
+            </div>
+            <div class="modal-body">
+                <p style="color:var(--text-muted);font-size:0.85rem;margin-bottom:18px;line-height:1.5;">
+                    Rejecting will return this ticket to the tickets list as
+                    <strong style="color:var(--color-danger);">"For Revision"</strong> with the reason below visible
+                    to the operator and branch user.
+                </p>
+                <div class="form-group">
+                    <label for="rejectReasonInput">Rejection Reason <span style="color:var(--color-danger);">*</span></label>
+                    <textarea id="rejectReasonInput" rows="4" placeholder="Explain why this resolution is being rejected..." style="min-height:110px;"></textarea>
+                </div>
+                <div class="validation-warning u-hidden" id="rejectError">
+                    <i class="fas fa-exclamation-circle"></i>
+                    <span>Please enter a rejection reason.</span>
+                </div>
+                <div class="form-actions">
+                    <button type="button" class="btn btn-secondary" id="cancelReject">Cancel</button>
+                    <button type="button" class="btn btn-danger" id="submitRejectionBtn"><i class="fas fa-undo-alt"></i> Reject &amp; Return for Revision</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ============================================================ -->
+    <!-- MODAL: CONFIRM DIALOG (Styled replacement for confirm())     -->
+    <!-- ============================================================ -->
+    <div class="modal-overlay" id="confirmModal">
+        <div class="modal-container modal-sm">
+            <div class="modal-header">
+                <h2><i class="fas fa-question-circle" id="confirmModalIcon"></i> <span id="confirmModalTitle">Confirm</span></h2>
+                <button class="modal-close" id="closeConfirmModal">&times;</button>
+            </div>
+            <div class="modal-body">
+                <p class="confirm-modal-message" id="confirmModalMessage">Are you sure?</p>
+                <div class="form-actions" style="margin-top:24px;">
+                    <button type="button" class="btn btn-secondary" id="cancelConfirmBtn">Cancel</button>
+                    <button type="button" class="btn btn-primary" id="acceptConfirmBtn"><i class="fas fa-check"></i> Confirm</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ============================================================ -->
+    <!-- MODAL: RENAME DIALOG (Styled replacement for prompt())       -->
+    <!-- ============================================================ -->
+    <div class="modal-overlay" id="renameModal">
+        <div class="modal-container modal-sm">
+            <div class="modal-header">
+                <h2><i class="fas fa-pen rename-modal-icon" id="renameModalIcon"></i> <span id="renameModalTitle">Rename</span></h2>
+                <button class="modal-close" id="closeRenameModal">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label for="renameModalInput" id="renameModalLabel">New name</label>
+                    <input type="text" id="renameModalInput" maxlength="120" autocomplete="off" spellcheck="false" />
+                </div>
+                <p class="rename-modal-hint u-hidden" id="renameModalHint"></p>
+                <div class="form-actions" style="margin-top:24px;">
+                    <button type="button" class="btn btn-secondary" id="cancelRenameBtn">Cancel</button>
+                    <button type="button" class="btn btn-primary" id="acceptRenameBtn"><i class="fas fa-check"></i> Rename</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ============================================================ -->
+    <!-- SCRIPTS                                                       -->
+    <!-- ============================================================ -->
+    <script src="firebase.js"></script>
+    <!-- ===== Error Reporter: captures crashes + unhandled rejections =====
+         Loaded FIRST (right after firebase.js) so it is listening before
+         any other script runs and can therefore catch their failures. -->
+    <script src="js/error-reporter.js"></script>
+    <script src="js/auth.js"></script>
+    <!-- ===== Desktop Notification Feature ===== -->
+        <script src="js/notifications.js"></script>
+    <!-- ===== HR <-> Superadmin chat (superadmin only) =====
+         Loaded after firebase.js so the global `db` / `auth` exist. -->
+    <script src="js/chat.js"></script>
+<!-- Unsend confirm modal — loads AFTER chat.js so window.ChatService exists;
+     it calls ChatService.unsendMessage() behind the author-only rules gate. -->
+<script src="js/chat-unsend.js"></script>
+    <!-- Refresh-state manager: keeps the user on the current tab/modal after F5 -->
+    <script src="js/refresh-state.js"></script>
+    <!-- Theme manager: dark/light toggle, notification bell, global ticket search -->
+    <script src="js/theme.js"></script>
+    <!-- ===== Violation "COMMAND CENTER REPORT" PDF builder =====
+         Shared with the HR dashboard (ownerdashboard.html), which prints the
+         same report but does NOT load script.js. Must be loaded before
+         script.js, which only ever delegates to window.ViolationReport. -->
+    <script src="js/violation-report.js"></script>
+    <!-- ===== Approval Email Notification (requester notification) =====
+         js/email-config.js  → endpoint/secret/sender + portal link (no secrets)
+         js/email.js         → message builder + Apps Script bridge client
+         Setup guide: docs/EMAIL-SETUP.md -->
+    <script src="js/email-config.js"></script>
+    <script src="js/email.js"></script>
+    <!-- ===== In-app attachment viewer (image / video / PDF lightbox) =====
+         Loaded BEFORE script.js: script.js calls window.AttachmentViewer
+         .openForRows() for the violations folder browser and .init() from
+         initApp(). The dialog markup is INJECTED by the module, so this
+         page deliberately has no <div> for it any more. -->
+    <script src="js/attachment-viewer.js"></script>
+    <script src="script.js?v=branch-backfill-2"></script>
+    <!-- ===== HR uploads presence tracker (superadmin dashboard) ====
+         Loaded AFTER script.js so window.HrUploads exists when violations
+         rows render their upload indicators. Toggles the amber has-uploads
+         class on [data-upload-key] buttons whenever HR attaches files. -->
+    <script src="js/hr-uploads.js"></script>
+    <!-- ===== Command palette + keyboard shortcuts (Ctrl/Cmd+K) =====
+         Loaded LAST: it references window.switchTab and window.escapeHTML,
+         which script.js defines. Every lookup is guarded, so a missing global
+         degrades to a shorter command list rather than an error. -->
+    <script src="js/command-palette.js"></script>
+    <!-- ===== First-run onboarding tour (operators / superadmins) =====
+         After the palette. It bails out on any page without a sidebar, so
+         loading it everywhere is safe. -->
+    <script src="js/onboarding.js"></script>
+</body>
+</html>
+

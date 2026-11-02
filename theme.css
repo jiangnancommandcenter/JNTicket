@@ -1,0 +1,315 @@
+/* ============================================================== */
+/*  THEME SYSTEM (theme.css)                                       */
+/*  Loaded AFTER style.css. Provides:                              */
+/*    1. Dark mode ([data-theme="dark"] variable overrides)        */
+/*    2. White-logo treatment for dark surfaces                    */
+/*    3. Shared header components: theme toggle + nav section      */
+/*       labels                                                    */
+/*  Default theme: LIGHT on first visit (the OS preference is ignored),
+    then persisted in localStorage (rcms_theme). Dark is opt-in.     */
+/* ============================================================== */
+
+html { color-scheme: light; }
+
+/* ----- DARK PALETTE ----- */
+html[data-theme="dark"] {
+    --bg-primary: #0B1220;
+    --bg-secondary: #0F172A;
+    --bg-tertiary: #1B2A44;
+    --bg-card: #101B2E;
+    --bg-hover: #1B2A44;
+    --bg-input: #15223A;
+
+    --text-primary: #E2E8F0;
+    --text-secondary: #A8B6C8;
+    --text-muted: #7C8DA5;
+
+    --border-color: #24334D;
+    --border-light: #33456466;
+
+    /* Lighter blue for dark mode: #1A6FD4 is too dark to read on a dark
+       bubble, so the mention text steps up rather than disappearing. */
+    --chat-accent-blue: #7CB8FF;
+    --chat-accent-blue-soft: rgba(74, 158, 255, 0.20);
+
+    /* Outgoing chat bubble stays a saturated blue in dark mode too (white text
+       on it is 4.6:1); it must NOT follow --chat-accent-blue's lighter #7CB8FF,
+       which white text could not sit on. */
+    --chat-bubble-out: #1A6FD4;
+
+    /* Reference chips keep the SAME pale pills and the SAME dark texts in
+       dark mode (theme-stable, like --chat-bubble-out): pale pills pop on a
+       dark background, and the 6.7:1 / 6.8:1 contrast ratios hold here too. */
+    --chat-ticket-chip-bg: #CCFBF1;
+    --chat-ticket-chip-text: #115E59;
+    --chat-ticket-chip-border: #5EEAD4;
+    --chat-violation-chip-bg: #FEE2E2;
+    --chat-violation-chip-text: #991B1B;
+    --chat-violation-chip-border: #FCA5A5;
+
+    /* Role identity in dark mode: the avatar fills stay saturated (white
+       initials must stay legible); only the badge text/soft tints step up. */
+    --chat-role-superadmin: #7CB8FF;
+    --chat-role-hr: #4ADE80;
+    --chat-role-area-manager: #A78BFA;
+    --chat-role-rmsm: #FBBF24;
+    --chat-avatar-unknown: #7C8DA5;
+    /* Rank marker steps up with the rest of the role hues so the gold ring and
+       star stay visible on a dark surface (a 0.3-alpha gold hairline would
+       vanish there — the same reason the border tokens are lifted above). */
+    --chat-rank-gold: #FFD166;
+
+    --sidebar-bg: #0D1626;
+    --sidebar-border: #24334D;
+    --sidebar-text: #E2E8F0;
+    --sidebar-text-muted: #8CA0B8;
+    --sidebar-hover: #16233B;
+    --sidebar-active-bg: rgba(114, 191, 106, 0.18);
+    --sidebar-active-text: #B9E9B3;
+
+    /* Keep status hues recognizable on dark, slightly softened backgrounds */
+    --color-online-bg: rgba(22, 163, 74, 0.18);
+    --color-offline-bg: rgba(220, 38, 38, 0.18);
+    --color-warning-bg: rgba(202, 138, 4, 0.18);
+    --color-insufficient-bg: rgba(124, 58, 237, 0.20);
+    --color-primary-bg: rgba(114, 191, 106, 0.16);
+    --color-danger-bg: rgba(220, 38, 38, 0.16);
+    --color-pending-bg: rgba(202, 138, 4, 0.16);
+    --color-progress-bg: rgba(37, 99, 235, 0.20);
+    --color-resolved-bg: rgba(22, 163, 74, 0.16);
+    /* Bordered notices (caution box, validation banner, success notice) draw
+       their outline from these. The light values are tuned for a white card, so
+       they are lifted here — a 0.3 alpha hairline is nearly invisible on a dark
+       surface. */
+    --color-warning-border: rgba(202, 138, 4, 0.55);
+    --color-danger-border: rgba(220, 38, 38, 0.55);
+    --color-resolved-border: rgba(22, 163, 74, 0.55);
+
+    /* Brighter status hues for dark. The light values (e.g. #ca8a04 amber,
+       #dc2626 red) are tuned for white and drop below a readable contrast once
+       they sit on a dark tinted panel — these are the same hues lightened so
+       icons, headings and borders stay legible in dark mode. */
+    --color-warning: #fbbf24;
+    --color-pending: #fbbf24;
+    --color-danger: #f87171;
+    --color-danger-hover: #ef4444;
+    --color-resolved: #4ade80;
+    --color-insufficient: #a78bfa;
+
+    --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.4);
+    --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.45);
+    --shadow-lg: 0 8px 30px rgba(0, 0, 0, 0.55);
+
+    /* Skeleton placeholders. The light-mode sheen is a translucent grey, which
+       barely reads against a dark card — dark needs a brighter, lower-contrast
+       sweep or the loading state looks frozen. Declared as page-level tokens
+       (same lesson as the owner dashboard's --owner-* tokens). */
+    --skeleton-base: #1B2A44;
+    --skeleton-sheen: rgba(203, 213, 225, 0.16);
+
+    /* Top-edge highlight on the dashboard KPI cards. The light value is a
+       near-white hairline; on a dark card a white hairline reads as a bright
+       seam, so dark uses a much fainter one. Without this override the cards
+       gain a hard white line across the top in dark mode. */
+    --card-highlight: rgba(226, 232, 240, 0.10);
+
+    color-scheme: dark;
+}
+
+/* Smooth transition when switching themes */
+body, .sidebar, .top-header, .card, .data-table, .table-container,
+.modal-container, input, select, textarea, .btn, .icon-btn {
+    transition: background-color 0.25s ease, border-color 0.25s ease, color 0.25s ease;
+}
+
+/* ============================================================== */
+/*  LOGO — two logos, two treatments                               */
+/*  .brand-logo (sidebar): the legacy transparent black Jiangnan  */
+/*  PNG. On dark surfaces it must read WHITE, hence the invert    */
+/*  below (brightness(0) -> black, invert(1) -> white).           */
+/*  .login-logo (login-family pages): the new opaque full-color   */
+/*  brand tile (logo.png) — NO filter, it reads fine on light and */
+/*  dark surfaces as-is, so it is deliberately excluded from the  */
+/*  dark-mode rule.                                               */
+/* ============================================================== */
+.brand-logo {
+    height: 40px;
+    width: auto;
+    object-fit: contain;
+    display: block;
+    position: static !important;
+    top: auto !important;
+    left: auto !important;
+    transform: none !important;
+}
+
+html[data-theme="dark"] .brand-logo {
+    filter: brightness(0) invert(1);
+    opacity: 0.92;
+}
+
+/* ============================================================== */
+/*  SHARED HEADER COMPONENTS                                       */
+/* ============================================================== */
+
+/* Small square icon buttons (theme toggle) */
+.icon-btn {
+    position: relative;
+    width: 36px;
+    height: 36px;
+    border-radius: 10px;
+    border: 1px solid var(--border-color);
+    background: var(--bg-card);
+    color: var(--text-secondary);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.95rem;
+    cursor: pointer;
+    transition: var(--transition);
+    flex-shrink: 0;
+}
+.icon-btn:hover {
+    color: var(--color-primary);
+    border-color: var(--color-primary);
+    background: var(--color-primary-bg);
+}
+.icon-btn[hidden] { display: none; }
+
+/* Header action cluster */
+.header-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+/* Sidebar section labels (OPERATIONS / INCIDENTS / ADMINISTRATION) */
+.nav-section-label {
+    font-size: 0.66rem;
+    font-weight: 800;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--sidebar-text-muted);
+    padding: 16px 16px 5px;
+    user-select: none;
+}
+.nav-section-label:first-child { padding-top: 6px; }
+
+/* Floating theme toggle (public pages without a header) */
+.floating-theme-toggle {
+    position: fixed;
+    top: 14px;
+    right: 14px;
+    z-index: 900;
+}
+
+/* ============================================================== */
+/*  DARK OVERRIDES — hardcoded colors that bypass CSS variables    */
+/*  (ownerdashboard.html / submit-ticket.html inline styles)       */
+/* ============================================================== */
+
+/* Sticky table headers hardcoded to near-white */
+html[data-theme="dark"] #ownerTicketsTable thead th,
+html[data-theme="dark"] table.data-table thead th {
+    background: #16233B;
+    color: var(--text-secondary);
+}
+
+/* ---------------------------------------------------------------
+   Role badges — the text was a hardcoded DARK hue, so it vanished.
+   ---------------------------------------------------------------
+   style.css picks each role's colour as a dark tone for a light chip
+   (HR is #0e7490 teal, Owner #7c3aed violet, Superadmin #b45309
+   amber). Those are the correct colours on white and completely
+   unusable on a dark surface: the HR badge composited to roughly
+   #10263A behind #0e7490 text — about 2.9:1, against a 4.5:1 WCAG AA
+   minimum. Each role keeps its HUE but steps up to a 300/400-shade
+   tint that reads on dark, and the chip fill/border alphas are raised
+   so the badge still looks like a badge. */
+html[data-theme="dark"] .role-badge.superadmin {
+    color: #fbbf24; background: rgba(251, 191, 36, 0.18); border-color: rgba(251, 191, 36, 0.45);
+}
+html[data-theme="dark"] .role-badge.owner {
+    color: #a78bfa; background: rgba(124, 58, 237, 0.22); border-color: rgba(167, 139, 250, 0.45);
+}
+html[data-theme="dark"] .role-badge.hr {
+    color: #5eead4; background: rgba(20, 184, 166, 0.18); border-color: rgba(94, 234, 212, 0.45);
+}
+html[data-theme="dark"] .role-badge.viewer {
+    color: #93c5fd; background: rgba(96, 165, 250, 0.18); border-color: rgba(147, 197, 253, 0.45);
+}
+html[data-theme="dark"] .role-badge.editor {
+    color: var(--color-resolved); background: rgba(34, 197, 94, 0.18); border-color: rgba(74, 222, 128, 0.45);
+}
+/* Chat thread-header role pills: same hue steps as the badges above so the
+   violet/green/blue cue survives dark mode. */
+html[data-theme="dark"] .chat-role-pill--owner {
+    color: #a78bfa; background: rgba(124, 58, 237, 0.22); border-color: rgba(167, 139, 250, 0.45);
+}
+html[data-theme="dark"] .chat-role-pill--rmsm {
+    color: #fbbf24; background: rgba(245, 158, 11, 0.22); border-color: rgba(251, 191, 36, 0.45);
+}
+html[data-theme="dark"] .chat-role-pill--hr {
+    color: #4ade80; background: rgba(22, 163, 74, 0.20); border-color: rgba(74, 222, 128, 0.45);
+}
+html[data-theme="dark"] .chat-role-pill--superadmin {
+    color: #7cb8ff; background: rgba(37, 99, 235, 0.22); border-color: rgba(124, 184, 255, 0.45);
+}
+/* RANK marker: the superadmin pill's gold border must also survive dark mode
+   (the light --chat-rank-gold #F5B301 is tuned for a white card). Declared
+   AFTER the role rule above so the gold wins over the blue border — same
+   cascade reasoning as the --chat-rank-gold token itself. */
+html[data-theme="dark"] .chat-role-pill--rank {
+    border-color: var(--chat-rank-gold, #FFD166);
+}
+/* Neutral badge, shown before the role resolves. */
+html[data-theme="dark"] .role-badge:not([class*="superadmin"]):not([class*="owner"]):not([class*="hr"]):not([class*="viewer"]):not([class*="editor"]) {
+    color: var(--text-secondary);
+}
+
+/* Blue accent tints on white inline backgrounds */
+html[data-theme="dark"] .track-input,
+html[data-theme="dark"] .track-resolved-footage-grid,
+html[data-theme="dark"] .upload-widget,
+html[data-theme="dark"] .dropzone {
+    background: var(--bg-input);
+    color: var(--text-primary);
+}
+
+/* Success/error modal cards hardcoded to white */
+html[data-theme="dark"] .success-modal,
+html[data-theme="dark"] .modal-container {
+    background: var(--bg-card);
+    color: var(--text-primary);
+}
+
+/* Charts canvas surface */
+html[data-theme="dark"] .card canvas { background: transparent; }
+
+/* The mobile drawer scrim.
+   `rgba(15,23,42,0.45)` is a DARK translucent wash: correct over a light
+   page, but on a dark page it composites to ~#0D1425 against a #0B1220
+   background — a 1.02:1 difference, i.e. effectively invisible, so the open
+   drawer lost all modal separation. Dark mode needs a heavier scrim plus a
+   small blur to pull focus to the drawer. The value stays a token, never a
+   literal, so the "no hardcoded surface" guard keeps holding. */
+html[data-theme="dark"] .mobile-nav-backdrop {
+    background: rgba(2, 6, 18, 0.72);
+    backdrop-filter: blur(2px);
+}
+
+/* Notification bar on dark */
+html[data-theme="dark"] #notificationBar {
+    background: #16233B;
+    border-color: var(--border-color);
+    color: var(--text-primary);
+}
+
+/* Printable report ALWAYS prints on white, regardless of theme */
+@media print {
+    html[data-theme="dark"] #printableReport { background: #fff !important; color: #0F172A !important; }
+}
+
+/* ----- Theme-aware scrollbars ----- */
+html[data-theme="dark"] ::-webkit-scrollbar-thumb { background: #334564; }
+html[data-theme="dark"] ::-webkit-scrollbar-thumb:hover { background: #46597c; }

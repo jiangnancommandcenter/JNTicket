@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CCTV Command Center</title>
+    <!--
+      ROOT ENTRY (GitHub Pages serves this file for the bare site URL).
+
+      WHY THIS EXISTS. The app's real entry point is login.html, but the
+      manifest's start_url is "." — which GitHub Pages resolves to THIS
+      directory root, and Pages serves a directory root ONLY from index.html.
+      With no index.html the installed PWA window opened at the root and hit
+      the GitHub "404 File not found — For root URLs you must provide an
+      index.html file" page. This file gives that root something to serve and
+      hands off to login.html (the auth gate).
+
+      The redirect is belt-and-suspenders on purpose:
+        * the <meta refresh> works even with JavaScript disabled, and
+        * location.replace() (not href) does the same without leaving the
+          blank page in history, so Back can't bounce the user into a loop.
+      Two targets that resolve to the same place is fine — whichever fires
+      first wins and they agree.
+    -->
+    <meta http-equiv="refresh" content="0; url=login.html">
+    <script>
+        // Replace (not assign) so this stub never lingers in history.
+        try { window.location.replace('login.html'); } catch (e) { /* meta refresh covers it */ }
+    </script>
+
+    <!-- Same icon / manifest / theme wiring as every other page, so the very
+         first paint (before the redirect) already has the brand favicon and a
+         valid manifest — no globe, no unstyled flash. -->
+    <link rel="icon" href="tamang logo.png" type="image/png">
+    <link rel="apple-touch-icon" href="tamang logo.png">
+    <link rel="manifest" href="manifest.json">
+    <meta name="theme-color" id="themeColorMeta" content="#72bf6a">
+    <style>
+        html, body { margin: 0; height: 100%; background: #0F172A; }
+        body {
+            display: flex; align-items: center; justify-content: center;
+            font-family: Inter, system-ui, sans-serif; color: #F8FAFC;
+        }
+        .stub { text-align: center; opacity: 0.85; }
+        .stub a { color: #72bf6a; }
+    </style>
+</head>
+<body>
+    <div class="stub">
+        <p>Loading CCTV Command Center…</p>
+        <!-- Shown only if both redirects above fail (JS off + meta refresh blocked). -->
+        <p><a href="login.html">Continue to sign in</a></p>
+    </div>
+</body>
+</html>

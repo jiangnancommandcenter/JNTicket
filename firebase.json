@@ -1,0 +1,21 @@
+{
+  "hosting": {
+    "public": ".",
+    "ignore": [
+      "firebase.json",
+      ".firebaserc",
+      "**/.*",
+      "**/node_modules/**",
+      "test/**",
+      "docs/**",
+      "**/*.md",
+      "eslint.config.cjs",
+      "firestore.rules",
+      "package.json",
+      "package-lock.json"
+    ]
+  },
+  "firestore": {
+    "rules": "firestore.rules"
+  }
+}

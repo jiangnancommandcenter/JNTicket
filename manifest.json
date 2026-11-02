@@ -1,0 +1,19 @@
+{
+  "name": "Jiangnan CCTV Command Center",
+  "short_name": "CCTV Center",
+  "description": "Branch monitoring and incident ticketing for Jiangnan.",
+  "start_url": "./login.html",
+  "scope": ".",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#0F172A",
+  "theme_color": "#72bf6a",
+  "icons": [
+    {
+      "src": "tamang logo.png",
+      "sizes": "1254x1254",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}

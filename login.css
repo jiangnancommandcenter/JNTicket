@@ -1,0 +1,291 @@
+/* ============================================================== */
+/*  CCTV BRANCH HEALTH MONITORING - LOGIN PAGE                     */
+/*  Unified green brand theme + dark mode support                  */
+/* ============================================================== */
+
+:root {
+    --l-bg: #f1f5f9;
+    --l-box-bg: #ffffff;
+    --l-border: #e2e8f0;
+    --l-text: #0f172a;
+    --l-text-muted: #94a3b8;
+    --l-text-secondary: #475569;
+    --l-input-bg: #ffffff;
+    --l-grid-bg: #f8fafc;
+    --l-check-bg: #ffffff;
+    --l-check-text: #334155;
+    --l-focus: #5aa855;
+    --l-focus-ring: rgba(114, 191, 106, 0.2);
+}
+
+html[data-theme="dark"] {
+    --l-bg: #0B1220;
+    --l-box-bg: #101B2E;
+    --l-border: #24334D;
+    --l-text: #E2E8F0;
+    --l-text-muted: #7C8DA5;
+    --l-text-secondary: #A8B6C8;
+    --l-input-bg: #15223A;
+    --l-grid-bg: #0F1B30;
+    --l-check-bg: #16233B;
+    --l-check-text: #CBD5E1;
+    --l-focus: #72bf6a;
+    --l-focus-ring: rgba(114, 191, 106, 0.22);
+    color-scheme: dark;
+}
+
+*, *::before, *::after {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    background: var(--l-bg);
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--l-text);
+    padding: 20px;
+}
+
+/* Central Card Box */
+.login-box {
+    background: var(--l-box-bg);
+    width: 100%;
+    max-width: 400px;
+    padding: 44px 36px;
+    border-radius: 16px;
+    border: 1px solid var(--l-border);
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.08);
+    text-align: center;
+}
+
+/* Logo */
+.login-logo {
+    height: 56px;
+    width: auto;
+    object-fit: contain;
+    margin-bottom: 8px;
+}
+
+/* Title */
+.login-box h2 {
+    font-size: 18px;
+    font-weight: 600;
+    color: var(--l-text-secondary);
+    margin-bottom: 28px;
+    letter-spacing: 0.5px;
+}
+
+/* Input Fields */
+.login-box input {
+    width: 100%;
+    height: 48px;
+    padding: 0 16px;
+    margin-bottom: 16px;
+    border: 1px solid var(--l-border);
+    border-radius: 10px;
+    font-size: 14px;
+    font-family: inherit;
+    outline: none;
+    background: var(--l-input-bg);
+    color: var(--l-text);
+    transition: all 0.2s ease;
+}
+
+.login-box input::placeholder {
+    color: var(--l-text-muted);
+}
+
+.login-box input:focus {
+    border-color: var(--l-focus);
+    box-shadow: 0 0 0 3px var(--l-focus-ring);
+}
+
+/* Show/hide password wrapper */
+.pw-wrap { position: relative; }
+.pw-wrap input { padding-right: 44px; }
+.pw-toggle {
+    position: absolute;
+    right: 6px;
+    top: 7px;
+    width: 36px;
+    height: 34px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    background: none;
+    border: none;
+    color: var(--l-text-muted);
+    cursor: pointer;
+    font-size: 0.9rem;
+    border-radius: 8px;
+}
+.pw-toggle:hover { color: var(--l-focus); background: var(--l-focus-ring); }
+
+/* Submit Button — unified GREEN brand gradient */
+.login-box button[type="submit"] {
+    width: 100%;
+    height: 48px;
+    background: linear-gradient(135deg, var(--color-primary, #72bf6a), #5aa855);
+    color: #ffffff;
+    border: none;
+    border-radius: 10px;
+    font-size: 15px;
+    font-weight: 600;
+    letter-spacing: 1px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    margin-top: 8px;
+    font-family: inherit;
+}
+
+.login-box button[type="submit"]:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 20px rgba(114, 191, 106, 0.4);
+}
+
+.login-box button[type="submit"]:active {
+    transform: translateY(0);
+}
+
+.login-box button[type="submit"]:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+    transform: none;
+}
+
+/* Message Text */
+#message {
+    margin-top: 16px;
+    font-size: 13px;
+    font-weight: 500;
+    color: #dc2626;
+    min-height: 18px;
+    word-break: break-word;
+}
+
+/* Forgot password link */
+.forgot-link {
+    display: inline-block;
+    margin-top: 12px;
+    font-size: 12.5px;
+    color: var(--l-text-muted);
+    cursor: pointer;
+    text-decoration: none;
+    transition: color 0.2s ease;
+}
+.forgot-link:hover { color: var(--l-focus); text-decoration: underline; }
+
+/* Back link */
+.back-link {
+    display: inline-block;
+    margin-top: 20px;
+    color: var(--l-text-muted);
+    font-size: 13px;
+    text-decoration: none;
+    transition: color 0.2s ease;
+}
+
+.back-link:hover {
+    color: var(--l-focus);
+}
+
+
+/* ============================================================== */
+/*  REGISTRATION - branch checkboxes + toggle links               */
+/* ============================================================== */
+.toggle-link {
+    margin-top: 18px;
+    font-size: 13px;
+    color: var(--l-text-secondary);
+}
+.toggle-link a {
+    color: var(--l-focus);
+    text-decoration: none;
+    font-weight: 600;
+}
+.toggle-link a:hover { text-decoration: underline; }
+.reg-label {
+    text-align: left;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--l-text-secondary);
+    margin: 4px 0 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.4px;
+}
+.branch-checkbox-grid {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    max-height: 180px;
+    overflow-y: auto;
+    background: var(--l-grid-bg);
+    border: 1px solid var(--l-border);
+    border-radius: 10px;
+    padding: 12px;
+    margin-bottom: 16px;
+}
+.checkbox-label {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 13px;
+    color: var(--l-check-text);
+    background: var(--l-check-bg);
+    border: 1px solid var(--l-border);
+    border-radius: 8px;
+    padding: 6px 10px;
+    cursor: pointer;
+    transition: all 0.15s ease;
+}
+.checkbox-label:hover { border-color: var(--l-focus); }
+.checkbox-label input { width: auto; height: auto; margin: 0; }
+#regMessage {
+    margin-top: 14px;
+    font-size: 13px;
+    font-weight: 500;
+    color: #dc2626;
+    min-height: 18px;
+    word-break: break-word;
+}
+
+/* ============================================================== */
+/*  MOBILE TOUCH TUNING (login + pending-approval)               */
+/* ============================================================== */
+/*
+   Mirrors the shared block at the end of style.css. This page loads
+   login.css, NOT style.css, so it needs its own copy of the same two
+   fixes: 16px fields (iOS zooms anything smaller and never zooms back
+   out) and touch-action on the buttons.
+*/
+@media (max-width: 640px), (pointer: coarse) {
+    .login-box input,
+    .login-box select,
+    .login-box textarea {
+        /* overrides the 14px above — iOS Safari zoom-in on focus */
+        font-size: 16px;
+    }
+
+    .login-box button,
+    .login-box input[type="submit"] {
+        touch-action: manipulation;
+        min-height: 46px;
+    }
+}
+
+/* ============================================================== */
+/*  RESPONSIVE - small phones                                      */
+/* ============================================================== */
+@media (max-width: 480px) {
+    body { padding: 12px 12px; align-items: flex-start; padding-top: 5vh; }
+    .login-box { padding: 30px 20px; border-radius: 14px; max-width: 100%; }
+    .login-box h2 { font-size: 16px; margin-bottom: 22px; }
+    .login-box input { height: 46px; }
+    .login-box button[type="submit"] { height: 46px; }
+}
+

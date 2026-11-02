@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pending Approval - CCTV Command Center</title>
+    <!-- Pre-paint theme -->
+    <script>(function(){try{var t=localStorage.getItem('rcms_theme');if(!t){t='light';}document.documentElement.setAttribute('data-theme',t);}catch(e){document.documentElement.setAttribute('data-theme','light');}})();</script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <!-- App icon + installable manifest (see main.html for the theme_color note) -->
+    <link rel="icon" href="tamang logo.png" type="image/png">
+    <link rel="apple-touch-icon" href="tamang logo.png">
+    <link rel="manifest" href="manifest.json">
+    <meta name="theme-color" id="themeColorMeta" content="#72bf6a">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <link rel="stylesheet" href="login.css">
+    <link rel="stylesheet" href="theme.css">
+    <style>
+        .status-icon {
+            width: 64px; height: 64px; margin: 0 auto 16px;
+            border-radius: 50%;
+            background: rgba(202, 138, 4, 0.15);
+            color: #CA8A04;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 1.6rem;
+        }
+        .status-icon i { animation: pulsePending 2s ease-in-out infinite; }
+        @keyframes pulsePending { 0%,100% { opacity: 1; } 50% { opacity: 0.45; } }
+        .pending-email {
+            display: inline-block;
+            background: var(--l-grid-bg);
+            border: 1px solid var(--l-border);
+            border-radius: 8px;
+            padding: 6px 12px;
+            font-size: 13px;
+            font-weight: 600;
+            color: var(--l-text);
+            margin-bottom: 18px;
+            word-break: break-all;
+        }
+        .pending-note {
+            font-size: 13px;
+            line-height: 1.7;
+            color: var(--l-text-secondary);
+            margin-bottom: 22px;
+        }
+        .pending-actions { display: flex; flex-direction: column; gap: 10px; }
+        .pending-actions button {
+            width: 100%; height: 44px;
+            border: none; border-radius: 10px;
+            font-size: 14px; font-weight: 600; font-family: inherit;
+            cursor: pointer; transition: all 0.2s ease;
+        }
+        #checkStatusBtn {
+            background: var(--l-check-bg);
+            color: var(--l-text);
+            border: 1px solid var(--l-border) !important;
+        }
+        #checkStatusBtn:hover { border-color: var(--l-focus) !important; color: var(--l-focus); }
+        #pendingLogoutBtn {
+            background: var(--l-check-bg);
+            color: #dc2626;
+            border: 1px solid var(--l-border) !important;
+        }
+        #pendingLogoutBtn:hover { border-color: #dc2626 !important; }
+        #pendingStatus { margin-top: 14px; font-size: 13px; font-weight: 500; min-height: 18px; }
+    </style>
+</head>
+<body>
+    <!-- Theme toggle (fixed top-right) -->
+    <button type="button" class="icon-btn floating-theme-toggle" data-theme-toggle aria-label="Switch to dark mode" title="Switch to dark mode">
+        <i class="fas fa-moon"></i>
+    </button>
+
+    <div class="login-box">
+        <img src="logo.png" alt="Jiangnan CCTV Logo" class="login-logo">
+        <h2>Pending Approval</h2>
+
+        <div class="status-icon"><i class="fas fa-hourglass-half"></i></div>
+        <div>Your account is awaiting approval by a superadmin.</div>
+        <div class="pending-email" id="pendingEmail">Checking sign-in…</div>
+
+        <div class="pending-note">
+            Once an administrator approves your account, this page will
+            <strong>automatically take you to your dashboard</strong> — no need to
+            refresh or click anything. You can also press
+            <strong>Check Status</strong> below if nothing happens.
+        </div>
+
+        <div class="pending-actions">
+            <button type="button" id="checkStatusBtn"><i class="fas fa-rotate"></i> Check Status</button>
+            <button type="button" id="pendingLogoutBtn"><i class="fas fa-sign-out-alt"></i> Logout</button>
+        </div>
+
+        <div id="pendingStatus"></div>
+    </div>
+
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-firestore.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-auth.js"></script>
+    <script src="firebase.js"></script>
+    <!-- Loads the auth observer, which includes the AUTOMATIC ADVANCE watch:
+         the moment this account is approved it is routed straight to its
+         designated dashboard — no Check Status click needed. The button below
+         stays as the fallback if this listener could not attach. -->
+    <script src="js/auth.js"></script>
+    <script>
+        (function () {
+            'use strict';
+            var emailEl = document.getElementById('pendingEmail');
+            var statusEl = document.getElementById('pendingStatus');
+            var checkBtn = document.getElementById('checkStatusBtn');
+            var logoutBtn = document.getElementById('pendingLogoutBtn');
+            var currentEmail = '';
+
+            function setStatus(text, isError) {
+                statusEl.textContent = text;
+                statusEl.style.color = isError ? '#dc2626' : '#15803d';
+            }
+
+            async function fetchProfile(email) {
+                if (typeof window.getUserProfile === 'function') {
+                    return await window.getUserProfile(email);
+                }
+                if (typeof window.normalizeUserEmail === 'function' && window.db) {
+                    var snap = await window.db.collection('users').doc(window.normalizeUserEmail(email)).get();
+                    return snap.exists ? snap.data() : null;
+                }
+                return null;
+            }
+
+            auth.onAuthStateChanged(function (user) {
+                if (!user) { window.location.href = 'login.html'; return; }
+                currentEmail = user.email || '';
+                emailEl.textContent = currentEmail || 'Unknown account';
+            });
+
+            checkBtn.addEventListener('click', async function () {
+                if (!currentEmail) { setStatus('Not signed in yet — please wait.', true); return; }
+                checkBtn.disabled = true;
+                setStatus('Checking approval status…', false);
+                try {
+                    var profile = await fetchProfile(currentEmail);
+                    var status = profile && profile.status ? String(profile.status).toLowerCase() : '';
+                    if (status === 'pending') {
+                        setStatus('Still pending — a superadmin has not approved this account yet.', true);
+                    } else if (status === 'rejected' || status === 'denied') {
+                        setStatus('This account request was not approved. Contact your administrator.', true);
+                    } else if (status === 'approved' || status === 'active') {
+                        setStatus('Approved! Redirecting to login…', false);
+                        setTimeout(function () { window.location.href = 'login.html'; }, 1200);
+                    } else {
+                        setStatus('Account found but status is unclear. Try signing in again.', true);
+                        setTimeout(function () { window.location.href = 'login.html'; }, 1800);
+                    }
+                } catch (err) {
+                    console.error('Status check failed:', err);
+                    setStatus('Could not check status: ' + (err && err.message ? err.message : err), true);
+                } finally {
+                    checkBtn.disabled = false;
+                }
+            });
+
+            logoutBtn.addEventListener('click', async function () {
+                try {
+                    await auth.signOut();
+                    window.location.href = 'login.html';
+                } catch (err) {
+                    setStatus('Logout failed: ' + (err && err.message ? err.message : err), true);
+                }
+            });
+        })();
+    </script>
+    <script src="js/theme.js"></script>
+</body>
+</html>

@@ -1,0 +1,1922 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard - CCTV Command Center</title>
+    <!-- Pre-paint theme: apply saved dark/light theme BEFORE first paint (no flash) -->
+    <script>(function(){try{var t=localStorage.getItem('rcms_theme');if(!t){t='light';}document.documentElement.setAttribute('data-theme',t);}catch(e){document.documentElement.setAttribute('data-theme','light');}})();</script>
+    <!-- App icon + installable manifest (see main.html for the theme_color note) -->
+    <link rel="icon" href="tamang logo.png" type="image/png">
+    <link rel="apple-touch-icon" href="tamang logo.png">
+    <link rel="manifest" href="manifest.json">
+    <meta name="theme-color" id="themeColorMeta" content="#72bf6a">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <!-- Chart.js (same version as main.html) -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+    <link rel="stylesheet" href="style.css">
+    <!-- Theme System: dark mode + shared header components (loaded AFTER style.css) -->
+    <link rel="stylesheet" href="theme.css">
+    <!-- HR <-> Superadmin chat (HR + superadmin only; owners and operators never see it) -->
+    <link rel="stylesheet" href="chat.css">
+    <!-- ============================================================ -->
+    <!--  TICKET STYLE (copied from main.html / style.css)             -->
+    <!-- ============================================================ -->
+    <style>
+        /* Status Badge */
+        .status-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 7px;
+            padding: 5px 14px;
+            border-radius: 20px;
+            font-size: 0.81rem;
+            font-weight: 600;
+            white-space: nowrap;
+        }
+        .status-badge::before {
+            content: '';
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+        }
+        .status-badge.online {
+            background: var(--color-online-bg);
+            color: var(--color-online);
+            border: 1px solid var(--color-online-border);
+        }
+        .status-badge.online::before { background: var(--color-online); }
+        .status-badge.offline {
+            background: var(--color-offline-bg);
+            color: var(--color-offline);
+            border: 1px solid var(--color-offline-border);
+        }
+        .status-badge.offline::before { background: var(--color-offline); }
+        .status-badge.warning {
+            background: var(--color-warning-bg);
+            color: var(--color-warning);
+            border: 1px solid var(--color-warning-border);
+        }
+        .status-badge.warning::before { background: var(--color-warning); }
+
+        /* Ticket Status Badges */
+        .status-badge.pending {
+            background: var(--color-pending-bg);
+            color: var(--color-pending);
+            border: 1px solid var(--color-pending-border);
+        }
+        .status-badge.pending::before { background: var(--color-pending); }
+        .status-badge.in-progress {
+            background: var(--color-progress-bg);
+            color: var(--color-progress);
+            border: 1px solid var(--color-progress-border);
+        }
+        .status-badge.in-progress::before { background: var(--color-progress); }
+        .status-badge.resolved {
+            background: var(--color-resolved-bg);
+            color: var(--color-resolved);
+            border: 1px solid var(--color-resolved-border);
+        }
+        .status-badge.resolved::before { background: var(--color-resolved); }
+
+        /* Approval Status Badges */
+        .status-badge.pending-approval {
+            background: var(--color-warning-bg);
+            color: var(--color-warning);
+            border: 1px solid var(--color-warning-border);
+        }
+        .status-badge.pending-approval::before { background: var(--color-warning); }
+        .status-badge.approved {
+            background: var(--color-resolved-bg);
+            color: var(--color-resolved);
+            border: 1px solid var(--color-resolved-border);
+        }
+        .status-badge.approved::before { background: var(--color-resolved); }
+        .status-badge.rejected {
+            background: var(--color-danger-bg);
+            color: var(--color-danger);
+            border: 1px solid var(--color-offline-border);
+        }
+        .status-badge.rejected::before { background: var(--color-danger); }
+
+        /* For Revision / Insufficient Footage badges */
+        .status-badge.for-revision {
+            background: var(--color-danger-bg);
+            color: var(--color-danger);
+            border: 1px solid var(--color-offline-border);
+            font-weight: 700;
+        }
+        .status-badge.for-revision::before { background: var(--color-danger); }
+        .status-badge.insufficient-footage {
+            background: var(--color-insufficient-bg);
+            color: var(--color-insufficient);
+            border: 1px solid var(--color-insufficient-border);
+            font-weight: 700;
+        }
+        .status-badge.insufficient-footage::before { background: var(--color-insufficient); }
+
+        /* Priority dot */
+        .priority-dot {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+        }
+        .priority-dot .dot {
+            display: inline-block;
+            width: 9px;
+            height: 9px;
+            border-radius: 50%;
+            flex-shrink: 0;
+        }
+        .priority-dot .dot.high { background-color: #dc2626; }
+        .priority-dot .dot.low { background-color: #22c55e; }
+        .ticket-link {
+            color: var(--color-primary);
+            font-weight: 600;
+            cursor: pointer;
+            text-decoration: underline;
+            text-decoration-color: rgba(59, 130, 246, 0.3);
+        }
+        .ticket-link:hover { color: var(--owner-ticket-link-hover, #60a5fa); }
+
+        /* Ticket attachments section */
+        .attachment-section,
+        .ticket-attachments-section {
+            margin-top: 16px;
+            padding-top: 16px;
+            border-top: 1px solid var(--border-color);
+        }
+        .attachment-section h4 {
+            font-size: 0.9rem;
+            font-weight: 600;
+            color: var(--text-secondary);
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-bottom: 10px;
+        }
+    /* Upload widget */
+        .upload-widget {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            width: 100%;
+        }
+        .upload-widget .upload-dropzone {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+            padding: 22px 16px;
+            border: 2px dashed var(--border-light);
+            border-radius: var(--radius-md);
+            background: var(--bg-tertiary);
+            cursor: pointer;
+            text-align: center;
+            transition: var(--transition);
+            position: relative;
+        }
+        .upload-widget .upload-dropzone:hover {
+            border-color: var(--color-primary);
+            background: var(--color-primary-bg);
+        }
+        .upload-widget .upload-dropzone.dragover {
+            border-color: var(--color-primary);
+            background: var(--color-primary-bg);
+            box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.15);
+            transform: scale(1.01);
+        }
+        .upload-widget .upload-dropzone i {
+            font-size: 1.6rem;
+            color: var(--color-primary);
+        }
+        .upload-widget .upload-dropzone-text {
+            font-size: 0.85rem;
+            font-weight: 600;
+            color: var(--text-secondary);
+        }
+        .upload-widget .upload-dropzone-hint {
+            font-size: 0.72rem;
+            color: var(--text-muted);
+        }
+        .upload-widget .upload-dropzone input[type="file"] {
+            position: absolute;
+            width: 1px;
+            height: 1px;
+            opacity: 0;
+            overflow: hidden;
+            clip: rect(0 0 0 0);
+            white-space: nowrap;
+        }
+        .upload-widget .upload-actions {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+        .upload-widget .btn-upload-now:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        /* Selected file list */
+        .upload-file-list {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+            max-height: 132px;
+            overflow-y: auto;
+        }
+        .upload-file-list:empty { display: none; }
+        .upload-file-item {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 7px 10px;
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border-color);
+            border-radius: var(--radius-sm);
+            font-size: 0.8rem;
+        }
+        .upload-file-item i {
+            color: var(--color-primary);
+            flex-shrink: 0;
+        }
+        .upload-file-item .upload-file-name {
+            flex: 1;
+            min-width: 0;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            color: var(--text-primary);
+            font-weight: 500;
+        }
+        .upload-file-item .upload-file-size {
+            color: var(--text-muted);
+            font-size: 0.72rem;
+            flex-shrink: 0;
+        }
+        .upload-file-item .upload-file-remove {
+            background: none;
+            border: none;
+            color: var(--text-muted);
+            width: 22px;
+            height: 22px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 50%;
+            cursor: pointer;
+            transition: var(--transition);
+            flex-shrink: 0;
+        }
+        .upload-file-item .upload-file-remove:hover {
+            background: var(--color-danger-bg);
+            color: var(--color-danger);
+        }
+        .upload-file-item .upload-file-preview {
+            width: 44px;
+            height: 44px;
+            flex-shrink: 0;
+            border-radius: var(--radius-sm);
+            overflow: hidden;
+            background: var(--bg-primary);
+            border: 1px solid var(--border-color);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            position: relative;
+            text-decoration: none;
+        }
+        .upload-file-item .upload-file-thumb {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            display: block;
+        }
+        .upload-file-item .upload-file-icon {
+            font-size: 1.3rem;
+            color: var(--text-muted);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .upload-file-item .upload-file-play {
+            position: absolute;
+            inset: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: rgba(0, 0, 0, 0.35);
+            color: #fff;
+            font-size: 1rem;
+            pointer-events: none;
+        }
+        .upload-file-item .upload-file-info {
+            flex: 1;
+            min-width: 0;
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+        }
+
+        /* Upload progress bar */
+        .upload-progress-wrap {
+            display: none;
+            align-items: center;
+            gap: 10px;
+        }
+        .upload-progress-wrap.visible { display: flex; }
+        .upload-progress-wrap .upload-spinner {
+            color: var(--color-primary);
+            font-size: 1rem;
+            flex-shrink: 0;
+        }
+        .upload-progress-wrap .upload-progress {
+            flex: 1;
+            height: 8px;
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border-color);
+            border-radius: 10px;
+            overflow: hidden;
+        }
+        .upload-progress-wrap .upload-progress-bar {
+            height: 100%;
+            width: 0%;
+            background: linear-gradient(90deg, var(--color-primary), #6366f1);
+            border-radius: 10px;
+            transition: width 0.2s ease;
+        }
+        .upload-progress-wrap .upload-progress-text {
+            font-size: 0.78rem;
+            font-weight: 600;
+            color: var(--color-primary);
+            min-width: 38px;
+            text-align: right;
+            flex-shrink: 0;
+        }
+        .upload-progress-wrap.success .upload-progress-bar { background: var(--color-resolved); }
+        .upload-progress-wrap.success .upload-progress-text { color: var(--color-resolved); }
+        .upload-progress-wrap.error .upload-progress-bar { background: var(--color-danger); }
+        .upload-progress-wrap.error .upload-progress-text { color: var(--color-danger); }
+
+        /* Attachment grid */
+        .attachment-grid,
+        .attachments-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+            gap: 12px;
+            padding: 4px 0;
+        }
+        .attachment-item {
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border-color);
+            border-radius: var(--radius-md);
+            overflow: hidden;
+            transition: var(--transition);
+            position: relative;
+        }
+        .attachment-item:hover {
+            border-color: var(--border-light);
+            box-shadow: var(--shadow-sm);
+        }
+        .attachment-preview {
+            display: block;
+            width: 100%;
+            height: 110px;
+            overflow: hidden;
+            background: var(--bg-primary);
+            position: relative;
+        }
+        .attachment-preview img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            display: block;
+            transition: transform 0.2s ease;
+        }
+        .attachment-preview:hover img { transform: scale(1.05); }
+        .attachment-file-icon {
+            width: 100%;
+            height: 100%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 2.2rem;
+            background: var(--bg-primary);
+        }
+        .attachment-meta {
+            padding: 8px 10px;
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+        }
+        .attachment-name {
+            font-size: 0.78rem;
+            font-weight: 500;
+            color: var(--text-primary);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        .attachment-size {
+            font-size: 0.7rem;
+            color: var(--text-muted);
+        }
+        .attachment-open-link {
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+            font-size: 0.72rem;
+            color: var(--color-primary);
+            margin-top: 4px;
+            text-decoration: none;
+        }
+        .attachment-open-link:hover { text-decoration: underline; }
+        .attachment-remove {
+            position: absolute;
+            top: 6px;
+            right: 6px;
+            width: 26px;
+            height: 26px;
+            border: none;
+            border-radius: 50%;
+            background: rgba(0,0,0,0.6);
+            color: #fff;
+            font-size: 0.75rem;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            opacity: 0;
+            transition: opacity 0.2s ease;
+            z-index: 2;
+        }
+        .attachment-item:hover .attachment-remove { opacity: 1; }
+        .attachment-remove:hover {
+            background: var(--color-danger);
+            color: #fff;
+        }
+        .attachment-video-preview {
+            width: 100%;
+            height: 110px;
+            object-fit: cover;
+            background: #000;
+            display: block;
+        }
+        .review-card .attachments-grid { margin-top: 0; }
+
+        /* ================================================================
+           EXPIRED APPROVED TICKET (Area Manager dashboard)
+
+           The window has closed, so the report and its CCTV evidence are
+           withheld. Every colour is a THEME TOKEN, never a literal: this
+           page's inline <style> is the one place in the app that shipped
+           hardcoded light values, and test/owner-dark-mode.test.js fails the
+           build on exactly that (it is the bug the --owner-* tokens fixed).
+           ================================================================ */
+        .owner-access-expired {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            padding: 18px 20px;
+            margin-bottom: 18px;
+            border: 1px solid var(--color-danger-border, var(--color-offline-border));
+            border-left: 4px solid var(--color-danger);
+            border-radius: var(--radius-md);
+            background: var(--color-danger-bg);
+        }
+        .owner-access-expired-title {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin: 0;
+            font-size: 0.95rem;
+            font-weight: 700;
+            color: var(--color-danger);
+        }
+        .owner-access-expired-title i { flex-shrink: 0; }
+        .owner-access-expired-body {
+            margin: 0;
+            font-size: 0.85rem;
+            line-height: 1.5;
+            color: var(--text-secondary);
+        }
+        .owner-access-expired-when {
+            margin: 0;
+            font-size: 0.78rem;
+            font-weight: 600;
+            color: var(--text-muted);
+        }
+        /* Footnote under the metadata card, so it is obvious the missing
+           description/footage is deliberate and not a loading failure. */
+        .owner-withheld-note {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-top: 14px;
+            padding: 10px 12px;
+            border-radius: var(--radius-sm);
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border-color);
+            font-size: 0.8rem;
+            color: var(--text-muted);
+        }
+        .owner-withheld-note i { color: var(--color-warning); flex-shrink: 0; }
+
+        /* ================================================================
+           PENDING-APPROVAL TICKET (Area Manager / RM-SM dashboard)
+
+           The superadmin has not signed this ticket off yet, so the report and
+           its CCTV evidence are withheld — exactly like the expired case above —
+           but the row is deliberately DIFFERENT in colour: amber, not red. A
+           pending ticket is a normal, expected state on its way to approval, not
+           an access problem, so it must not read as an error. It matches the
+           public Track page's own "still being processed" hourglass notice so the
+           two surfaces feel like one product.
+
+           Every colour is a THEME TOKEN, never a literal — the same rule the
+           expired block follows, and what test/owner-dark-mode.test.js enforces.
+           ================================================================ */
+        .owner-access-pending {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            padding: 18px 20px;
+            margin-bottom: 18px;
+            border: 1px solid var(--color-warning-border, var(--border-color));
+            border-left: 4px solid var(--color-warning);
+            border-radius: var(--radius-md);
+            background: var(--color-warning-bg);
+        }
+        .owner-access-pending-title {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin: 0;
+            font-size: 0.95rem;
+            font-weight: 700;
+            color: var(--color-warning);
+        }
+        .owner-access-pending-title i { flex-shrink: 0; }
+        .owner-access-pending-body {
+            margin: 0;
+            font-size: 0.85rem;
+            line-height: 1.5;
+            color: var(--text-secondary);
+        }
+
+        /* The expiring-window sentence under the Tickets heading. Muted so it
+           reads as guidance, not as the tab's primary description. */
+        .owner-window-note {
+            display: block;
+            margin-top: 4px;
+            font-size: 0.8rem;
+            color: var(--text-muted);
+        }
+        /* No text yet (the helper has not run) must not leave a gap. */
+        .owner-window-note:empty { display: none; }
+
+        /* ---- Re-access request form (inside the expired notice) ----
+           Amber, not danger: asking for access is a normal, expected action on
+           an expired ticket, so it must not look like an error. It matches the
+           Track page's `.track-reopen-form` treatment so the two surfaces feel
+           like one product. */
+        .owner-reopen-form {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            margin-top: 14px;
+            padding: 14px;
+            border: 1px solid var(--border-color);
+            border-radius: var(--radius-md);
+            background: var(--bg-tertiary);
+        }
+        .owner-reopen-form label {
+            display: flex;
+            align-items: center;
+            gap: 7px;
+            font-size: 0.85rem;
+            font-weight: 700;
+            color: var(--text-primary);
+        }
+        .owner-reopen-form label i { color: var(--color-warning); }
+        .owner-reopen-form textarea {
+            width: 100%;
+            min-height: 76px;
+            max-height: 200px;
+            padding: 10px 12px;
+            border: 1px solid var(--border-color);
+            border-radius: var(--radius-sm);
+            background: var(--bg-input);
+            color: var(--text-primary);
+            font-family: inherit;
+            font-size: 0.85rem;
+            line-height: 1.5;
+            resize: vertical;
+        }
+        .owner-reopen-form textarea:focus {
+            outline: none;
+            border-color: var(--color-primary);
+            /* Bare token, no rgba() fallback: the app's focus-ring convention
+               (style.css .search-box, .role-select) and what test/owner-dark-mode.test.js
+               enforces. A hardcoded low-alpha blue is invisible on a dark surface. */
+            box-shadow: 0 0 0 3px var(--color-primary-bg);
+        }
+        .owner-reopen-actions {
+            display: flex;
+            align-items: center;
+            justify-content: flex-end;
+            gap: 12px;
+            flex-wrap: wrap;
+        }
+        .owner-reopen-hint {
+            flex: 1;
+            min-width: 180px;
+            font-size: 0.75rem;
+            line-height: 1.4;
+            color: var(--text-muted);
+        }
+        /* Pending / fulfilled status line, and the per-request history items. */
+        .owner-reopen-status {
+            display: flex;
+            align-items: center;
+            gap: 7px;
+            margin-top: 12px;
+            font-size: 0.8rem;
+            font-weight: 700;
+        }
+        .owner-reopen-status.pending { color: var(--color-warning); }
+        .owner-reopen-status.fulfilled { color: var(--color-resolved); margin-top: 4px; }
+        .owner-reopen-when { font-weight: 500; color: var(--text-muted); }
+        .owner-reopen-history {
+            margin-top: 14px;
+            padding-top: 12px;
+            border-top: 1px solid var(--border-color);
+        }
+        .owner-reopen-history h4 {
+            margin: 0 0 8px;
+            font-size: 0.8rem;
+            font-weight: 700;
+            color: var(--text-secondary);
+        }
+        .owner-reopen-item {
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+            padding: 9px 11px;
+            margin-bottom: 6px;
+            border: 1px solid var(--border-color);
+            border-radius: var(--radius-sm);
+            background: var(--bg-tertiary);
+        }
+        .owner-reopen-item-text { font-size: 0.8rem; color: var(--text-primary); }
+        .owner-reopen-item-meta { font-size: 0.72rem; color: var(--text-muted); }
+
+        /* ---- Request additional footage form (Area Manager / RM/SM) ----
+           Same treatment as the re-access form: amber is the "normal,
+           expected action" colour, not an error. The video glyph takes the
+           brand primary so the two request forms never read as the same
+           action. */
+        .owner-footage-form {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            margin-top: 14px;
+            padding: 14px;
+            border: 1px solid var(--border-color);
+            border-radius: var(--radius-md);
+            background: var(--bg-tertiary);
+        }
+        .owner-footage-form label {
+            display: flex;
+            align-items: center;
+            gap: 7px;
+            font-size: 0.85rem;
+            font-weight: 700;
+            color: var(--text-primary);
+        }
+        .owner-footage-form label i { color: var(--color-primary); }
+        .owner-footage-form textarea {
+            width: 100%;
+            min-height: 76px;
+            max-height: 200px;
+            padding: 10px 12px;
+            border: 1px solid var(--border-color);
+            border-radius: var(--radius-sm);
+            background: var(--bg-input);
+            color: var(--text-primary);
+            font-family: inherit;
+            font-size: 0.85rem;
+            line-height: 1.5;
+            resize: vertical;
+        }
+        .owner-footage-form textarea:focus {
+            outline: none;
+            border-color: var(--color-primary);
+            /* Bare token, no rgba() fallback — same focus-ring convention as
+               the re-access textarea and what owner-dark-mode.test.js enforces. */
+            box-shadow: 0 0 0 3px var(--color-primary-bg);
+        }
+        .owner-footage-actions {
+            display: flex;
+            align-items: center;
+            justify-content: flex-end;
+            gap: 12px;
+            flex-wrap: wrap;
+        }
+        .owner-footage-hint {
+            flex: 1;
+            min-width: 180px;
+            font-size: 0.75rem;
+            line-height: 1.4;
+            color: var(--text-muted);
+        }
+        /* Pending / fulfilled status line, and the per-request history items. */
+        .owner-footage-status {
+            display: flex;
+            align-items: center;
+            gap: 7px;
+            margin-top: 12px;
+            font-size: 0.8rem;
+            font-weight: 700;
+        }
+        .owner-footage-status.pending { color: var(--color-warning); }
+        .owner-footage-status.fulfilled { color: var(--color-resolved); margin-top: 4px; }
+        .owner-footage-when { font-weight: 500; color: var(--text-muted); }
+        .owner-footage-history {
+            margin-top: 14px;
+            padding-top: 12px;
+            border-top: 1px solid var(--border-color);
+        }
+        .owner-footage-history h4 {
+            margin: 0 0 8px;
+            font-size: 0.8rem;
+            font-weight: 700;
+            color: var(--text-secondary);
+        }
+        .owner-footage-item {
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+            padding: 9px 11px;
+            margin-bottom: 6px;
+            border: 1px solid var(--border-color);
+            border-radius: var(--radius-sm);
+            background: var(--bg-tertiary);
+        }
+        .owner-footage-item-text { font-size: 0.8rem; color: var(--text-primary); }
+        .owner-footage-item-meta { font-size: 0.72rem; color: var(--text-muted); }
+
+    </style>
+    <!-- ============================================================ -->
+    <!--  OWNER DASHBOARD PRESENTATION POLISH                         -->
+    <!-- ============================================================ -->
+    <style>
+        /* ===== Owner theme (aligned to main.html) ===== */
+        /* The owner dashboard uses main.html's standard theme. We keep the
+           shared sidebar / header / toolbar / cards / tables / modals from
+           style.css instead of layering a separate gradient skin. */
+        /* ⚠️ This rule must DECLARE the background, not leave it empty. It used
+           to ship empty with the comment "no custom background", which cannot
+           override a declaration — so style.css's hardcoded light
+           #f8fafc→#f1f5f9 gradient on #ownerMainContent still won on an ID
+           match, and the whole page stayed light in dark mode while the cards
+           on top of it went dark. An empty rule is not an override. */
+        #ownerMainContent {
+            background: var(--bg-primary);
+        }
+
+        /* ------------------------------------------------------------
+           Dark-mode compatibility tokens
+           ------------------------------------------------------------
+           These used to be hardcoded light values (a 70% white table-cell
+           wash, dark-navy shadows, 20%-alpha borders). The white wash was
+           the real bug: in dark mode the cell text is #E2E8F0 over a
+           ~#B6BCC0 background — about 1.3:1 contrast, far below the 4.5:1
+           WCAG AA minimum. Every cell of the tickets table was unreadable.
+
+           The LIGHT values below are the EXACT values that were hardcoded
+           before, so light mode is unchanged. Only the dark column differs,
+           which is what keeps this honest: the page does not get a subtle
+           restyle, it gets fixed. */
+
+        :root {
+            /* Elevation. Dark-navy shadows on a dark background are
+               invisible, so the dark column borrows theme.css's --shadow-*
+               tokens, which are real (black) shadows for dark surfaces. */
+            --owner-elev-0: 0 1px 2px rgba(15, 23, 42, 0.06);
+            --owner-elev-1: 0 2px 12px rgba(15, 23, 42, 0.05);
+            --owner-elev-2: 0 8px 24px rgba(15, 23, 42, 0.06);
+            --owner-elev-3: 0 12px 28px rgba(15, 23, 42, 0.10);
+
+            --owner-hover-border: rgba(37, 99, 235, 0.2);
+            --owner-focus-border: rgba(37, 99, 235, 0.55);
+            --owner-focus-ring: 0 0 0 3px rgba(37, 99, 235, 0.13);
+            --owner-ticket-link-hover: #60a5fa;
+
+            /* The ticket table. Row/cell backgrounds are transparent by
+               default so the themed .data-table base in style.css shows
+               through — that is what removes the white wash entirely. */
+            --owner-ticket-head: rgba(248, 250, 252, 0.94);
+            --owner-ticket-row: transparent;
+            --owner-ticket-row-hover: rgba(37, 99, 235, 0.04);
+        }
+
+        html[data-theme="dark"] {
+            --owner-elev-0: var(--shadow-sm);
+            --owner-elev-1: var(--shadow-sm);
+            --owner-elev-2: var(--shadow-lg);
+            --owner-elev-3: var(--shadow-lg);
+
+            /* A 20%-alpha border is nearly invisible on a dark surface. */
+            --owner-hover-border: rgba(96, 165, 250, 0.45);
+            --owner-focus-border: #93c5fd;
+            /* Keyboard focus must be clearly visible. A 13%-alpha ring
+               disappears on dark, so the ring is both brighter AND wider. */
+            --owner-focus-ring: 0 0 0 3px rgba(147, 197, 253, 0.5);
+            --owner-ticket-link-hover: #93c5fd;
+
+            /* Kept for belt-and-braces only. theme.css already overrides
+               the sticky header; this makes the dark header correct even
+               if that shared rule is ever removed. */
+            --owner-ticket-head: #16233B;
+            --owner-ticket-row: transparent;
+            --owner-ticket-row-hover: var(--bg-hover);
+        }
+
+        /* ===== BIG ROLE INDICATOR (beside the page title) =====
+           #ownerUserRoleBadge used to be a 0.72rem chip in the far-right auth
+           row — it read as chrome, not as "this is your role here". It now sits
+           next to the page title and is deliberately BIG.
+
+           ⚠️ ID-SCOPED, ON PURPOSE. setActiveUser() rewrites
+           `className = 'role-badge <role>'` every time the role resolves, so
+           class-based sizing would be wiped on the first repaint. An ID rule
+           (1,0,0) outranks the shared .role-badge (0,1,0) with no !important.
+           The role COLOURS stay on .role-badge.owner/hr/superadmin/viewer in
+           style.css + theme.css — only SIZE/layout live here, so both themes
+           keep working untouched. The base rule's `margin-left: 8px` (it used
+           to trail the email) is reset: beside the title the gap comes from
+           .header-left's own flex gap. */
+        #ownerUserRoleBadge {
+            margin-left: 0;
+            font-size: 1rem;
+            font-weight: 800;
+            padding: 8px 18px;
+            letter-spacing: 0.5px;
+            box-shadow: var(--owner-elev-0);
+        }
+
+        /* Section headers */
+        .owner-section-header { margin-bottom: 20px; }
+
+        /* ---- Stacked section header (Tickets tab) ----
+           The base `.section-header` is a flex ROW with
+           `justify-content: space-between`, which puts the heading and the
+           whole control toolbar on ONE line. The tickets toolbar needs about
+           1,250px (search capped at 320px, three selects ~170px each, plus
+           gaps) while the content column is only ~1,020-1,180px once the
+           sidebar is subtracted, so `flex-wrap` broke the controls into an
+           unpredictable 3-then-1 / 2-then-2 block while the heading stayed
+           vertically centred beside it. Stacking removes the competition: the
+           controls get the full content width and any wrap is deliberate.
+
+           Scoped to a MODIFIER, not to `.owner-section-header` itself, because
+           the Overview section keeps its side-by-side layout — it carries a
+           single filter and was never crowded. */
+        .owner-section-header--stacked {
+            flex-direction: column;
+            align-items: stretch;
+            gap: 14px;
+        }
+        .owner-section-header--stacked > div:first-child { min-width: 0; }
+        .owner-section-header--stacked .owner-toolbar { width: 100%; }
+        /* The window note is its own line, so the description paragraph stays a
+           single tidy sentence instead of growing to three. */
+        .owner-section-header--stacked .owner-window-note { margin-top: 2px; }
+        /* The heading colour is DECLARED, not inherited. It used to be left
+           to inherit from <body>, which makes the single most important
+           text on the page depend on an unstated chain four levels up. If
+           anything in that chain is off, the heading silently disappears. */
+        .owner-section-header h2 {
+            font-weight: 800;
+            letter-spacing: -0.01em;
+            color: var(--text-primary);
+        }
+        .owner-section-header h2 i { color: var(--color-primary); }
+        .owner-section-header p { font-size: 0.86rem; color: var(--text-secondary); }
+
+        /* Summary cards */
+        #ownerKpiCards { gap: 16px; }
+        #ownerKpiCards .card {
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: var(--radius-xl);
+            padding: 20px 22px;
+            box-shadow: var(--owner-elev-1);
+            transition: var(--transition-slow);
+        }
+        #ownerKpiCards .card:hover {
+            transform: translateY(-3px);
+            border-color: var(--owner-hover-border);
+            box-shadow: var(--owner-elev-3);
+        }
+        #ownerKpiCards .card-value { font-weight: 800; letter-spacing: -0.02em; }
+
+        /* Owner panel & branch chips */
+        .owner-panel {
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: 18px;
+            padding: 22px;
+            box-shadow: var(--owner-elev-2);
+        }
+        .owner-branch-list .quick-status-item {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 10px;
+            padding: 13px 15px;
+            min-height: 54px;
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            transition: var(--transition);
+        }
+        .owner-branch-list .quick-status-item:hover {
+            border-color: var(--owner-hover-border);
+            box-shadow: var(--shadow-sm);
+        }
+        .owner-permissions-header h3 { font-weight: 800; letter-spacing: -0.01em; color: var(--text-secondary); }
+        /* ===== Toolbar controls (search + filters) ===== */
+        .owner-toolbar { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+        /* Search takes the slack; the selects are fixed so the row has a
+           predictable rhythm instead of every control growing to fit its
+           longest option. */
+        .owner-toolbar .search-box { flex: 1 1 240px; max-width: 420px; }
+        .owner-toolbar .search-box input,
+        .owner-toolbar select,
+        .owner-filter-wrap select,
+        #ownerTicketAccessFilter,
+        #ownerTicketStatusFilter,
+        #ownerTicketBranchFilter {
+            border: 1px solid var(--border-color);
+            background: var(--bg-secondary);
+            border-radius: 10px;
+            padding: 10px 14px;
+            color: var(--text-primary);
+            outline: none;
+            transition: var(--transition);
+            font-size: 0.9rem;
+        }
+        /* One width for all three filters, and a cap so a long branch name
+           cannot stretch its own select and shove the row into a wrap. The
+           old blanket `min-width: 160px` applied to the search input too,
+           fighting `.search-box`'s own min-width/max-width. */
+        #ownerTicketAccessFilter,
+        #ownerTicketStatusFilter,
+        #ownerTicketBranchFilter {
+            flex: 0 0 auto;
+            width: 168px;
+            min-width: 140px;
+            max-width: 200px;
+        }
+        .owner-toolbar .search-box input:focus,
+        .owner-toolbar select:focus,
+        .owner-filter-wrap select:focus {
+            border-color: var(--owner-focus-border);
+            box-shadow: var(--owner-focus-ring);
+        }
+
+        /* ============================================================
+           MOCKUP REPRODUCTION — PHONE ONLY (<=899px), TOKEN-ONLY
+           ============================================================
+           Two pieces copied from the pasted mobile mockup, rebuilt in this
+           page's own style system so dark mode comes from the tokens (there
+           is no `dark:` variant to keep in sync) and NO rule can leak into
+           main.html:
+             1. The emerald identity strip under the top header.
+             2. The Tickets "Search & Filter" card (mockup: p-3.5 rounded-2xl
+                card, full-width search, 2-column select grid).
+           ⚠️ EVERYTHING is inside the @media (max-width: 899px) below — the
+           same breakpoint the page's mobile drawer/tile layer uses. At
+           >=900px (desktop) the strip is display:none and the Tickets
+           toolbar falls back to the ORIGINAL .toolbar/.owner-toolbar flex
+           row from the <link>ed style.css, so the desktop page is
+           byte-identical to before this block existed.
+           ============================================================ */
+        .owner-subhead { display: none; }
+
+        @media (max-width: 899px) {
+
+        /* ---- 1. Identity strip (mockup's sub-header) ----
+           The green tint is --color-primary-bg, which theme.css re-tints for
+           dark (0.12 -> 0.16 alpha over a dark surface), so the strip stays
+           a tint and not a hardcoded emerald. The label stays
+           --text-secondary, not the green: #72bf6a on a near-white tint is
+           ~2.1:1, far under the 4.5:1 WCAG AA floor for text. The icon is
+           a graphic next to a label, so it may carry the hue. */
+        .owner-subhead {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 8px 14px;
+            flex-wrap: wrap;
+            padding: 8px 20px;
+            background: var(--color-primary-bg);
+            border-bottom: 1px solid var(--border-color);
+            font-size: 0.75rem;
+        }
+        .owner-subhead-label {
+            display: inline-flex;
+            align-items: center;
+            gap: 7px;
+            font-weight: 700;
+            color: var(--text-secondary);
+            min-width: 0;
+        }
+        .owner-subhead-label i { color: var(--color-online); }
+        /* The slot js/owner-dashboard.js moves #ownerAuthStatus into on
+           phones. :empty keeps it from occupying space before the move (or
+           forever, if JS never runs). */
+        .owner-subhead-auth { display: contents; }
+        .owner-subhead-auth:empty { display: none; }
+        .owner-subhead .header-auth-status {
+            margin-left: auto;
+            font-weight: 600;
+            color: var(--text-secondary);
+        }
+
+        /* ---- 2. Tickets filter card (mockup's search & filter card) ----
+           ⚠️ #ownerMainContent-PREFIXED on purpose. The page's own inline
+           rules pin the three selects by ID alone (`#ownerTicketAccessFilter
+           { width: 168px; max-width: 200px }`, specificity 1,0,0) and
+           `.owner-toolbar .search-box { max-width: 420px }` (0,2,0). An ID
+           beats any class-only selector, so WITHOUT the ID prefix these
+           would keep fighting the card layout — (1,1,0)+ outranks both with
+           no !important, the same trick the phone layer in style.css uses.
+
+           The phone layer already lays this toolbar out as a 2-col tile grid
+           below 899px; this block uses the SAME grid at every width, so the
+           card reads identically on a phone and on the desktop. */
+        #ownerMainContent .owner-filter-card {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 10px;
+            align-items: stretch;
+            margin-bottom: 0;
+            padding: 14px;
+            max-width: 640px;
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: 16px;
+            box-shadow: var(--owner-elev-0);
+        }
+        #ownerMainContent .owner-filter-card .search-box {
+            grid-column: 1 / -1;
+            flex: none;
+            width: 100%;
+            min-width: 0;
+            max-width: none;
+            padding: 0 12px;
+            border-radius: 12px;
+        }
+        #ownerMainContent .owner-filter-card .filter-group {
+            min-width: 0;
+            padding: 0;
+            background: transparent;
+            border: none;
+            border-radius: 0;
+        }
+        #ownerMainContent .owner-filter-card select,
+        #ownerMainContent .owner-filter-card .filter-group select {
+            flex: 1 1 auto;
+            width: 100%;
+            min-width: 0;
+            max-width: none;
+            padding: 9px 12px;
+            font-size: 0.78rem;
+            border: 1px solid var(--border-color);
+            background: var(--bg-tertiary);
+            border-radius: 12px;
+            color: var(--text-primary);
+        }
+        /* The mockup has exactly two selects; this page has five. Full-width
+           search, then half-width tiles in pairs, then the last select takes
+           the rest of the row — a lone half-width tile reads as a mistake.
+           When the JS hides the access/status filters (no viewing window for
+           this role), the remaining tiles simply re-flow and the row still
+           holds. */
+        #ownerMainContent .owner-filter-card .owner-filter-group:last-child {
+            grid-column: 1 / -1;
+        }
+
+        /* Mockup's rounded-xl (12px) header controls — phone only, so the
+           desktop header keeps its shared radii. Touch sizing (>=44x44) is
+           untouched — it is pinned by test/owner-mobile.test.js. */
+        #ownerMainContent .top-header .icon-btn,
+        #ownerMainContent .menu-toggle,
+        #btnOwnerNewTicket { border-radius: 12px; }
+
+        } /* end @media (max-width: 899px) — MOCKUP REPRODUCTION block */
+
+        /* ===== Tickets table =====
+           ⚠️ The cell/row backgrounds MUST come from a token, never a
+           hardcoded white. A 70%-opaque white on every cell made the dark
+           theme unreadable: --text-primary (#E2E8F0) on a ~#B6BCC0 cell is
+           roughly 1.3:1, versus the 4.5:1 WCAG AA minimum. The light column
+           resolves to `transparent`, which lets the themed `.data-table`
+           base in style.css paint the cell — one rule, both themes. */
+        #ownerTicketsTable { border-collapse: separate; border-spacing: 0; width: 100%; }
+        #ownerTicketsTable thead th {
+            position: sticky;
+            top: 0;
+            z-index: 1;
+            background: var(--owner-ticket-head);
+            color: var(--text-secondary);
+            font-size: 0.78rem;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            font-weight: 800;
+            padding: 13px 15px;
+            border-bottom: 1px solid var(--border-color);
+        }
+        #ownerTicketsTable tbody td {
+            padding: 15px;
+            background: var(--owner-ticket-row);
+            vertical-align: middle;
+            border-top: 1px solid var(--border-color);
+        }
+        #ownerTicketsTable tbody tr { cursor: pointer; }
+        #ownerTicketsTable tbody tr:hover td { background: var(--owner-ticket-row-hover); }
+        #ownerTicketsTable .ticket-link {
+            color: var(--color-primary);
+            font-weight: 700;
+            text-decoration: none;
+            cursor: pointer;
+        }
+        #ownerTicketsTable .ticket-link:hover { color: var(--owner-ticket-link-hover); text-decoration: underline; }
+        #ownerTicketsTable .status-badge { box-shadow: var(--owner-elev-0); }
+
+        /* ------------------------------------------------------------
+           NO VIEWING WINDOW FOR THIS ROLE (HR / superadmin)
+
+           The 2-day window is the REQUESTER's condition, so for a role
+           without one the "Access" column is a permanent dash and its
+           filter matches nothing. Both are hidden instead.
+
+           ⚠️ The column is hidden by POSITION, not by deleting the <th>
+           /<td>. Both are static markup and test/owner-mobile.test.js
+           requires their counts to match; omitting one renders an empty
+           cell on a phone. "Access" is the 7th of the 8 columns, and the
+           class is toggled by applyViewerExpiryChrome() in
+           js/owner-dashboard.js. On desktop the row still has a <td>
+           for the count to stay equal — it is simply not displayed. */
+        #ownerTicketsTable.owner-hides-access th:nth-child(7),
+        #ownerTicketsTable.owner-hides-access td:nth-child(7) {
+            display: none;
+        }
+
+        /* Pagination pill */
+        #ownerTicketPagination .page-info { color: var(--text-secondary); font-weight: 600; }
+
+        /* Modal detail polish */
+        .modal-header h2 { font-weight: 800; letter-spacing: -0.01em; }
+        .modal-close { border-radius: 8px; transition: var(--transition); }
+        .modal-close:hover { background: var(--color-danger-bg); color: var(--color-danger); }
+
+        /* Empty state */
+        .empty-state { padding: 56px 20px; }
+        .empty-state i { font-size: 2.8rem; }
+        .empty-state p { font-weight: 500; }
+
+        /* Table touch scrolling + slim scrollbars */
+        .table-container { -webkit-overflow-scrolling: touch; }
+        .table-container::-webkit-scrollbar { height: 8px; width: 8px; }
+        .table-container::-webkit-scrollbar-thumb { background: var(--border-light); border-radius: 4px; }
+
+        /* ===== Responsive / mobile-first layer (owner page specific) ===== */
+        /* Tablets & phones: keep the slim top bar tidy and stack the toolbar.
+           (The off-canvas sidebar drawer itself is handled by the shared
+           "MOBILE RESPONSIVE LAYER" block in style.css.) */
+        @media (max-width: 899px) {
+            /* ⚠️ #ownerPageSubtitle was REMOVED from ownerdashboard.html (phone fit).
+               The span no longer exists, so there is deliberately NO rule for it
+               here. The shared .header-subtitle phone rules serve main.html only. */
+            #ownerUserEmail {
+                max-width: 170px;
+                overflow: hidden;
+                text-overflow: ellipsis;
+                white-space: nowrap;
+            }
+            .owner-toolbar { flex-direction: column; align-items: stretch; gap: 10px; }
+            .owner-toolbar .search-box,
+            .owner-toolbar .filter-group,
+            .owner-filter-wrap { width: 100%; }
+            .owner-toolbar .search-box input,
+            .owner-toolbar select,
+            .owner-filter-wrap select { min-width: 0; width: 100%; }
+            .owner-panel { padding: 16px; }
+            .owner-branch-list .quick-status-item { padding: 11px 12px; min-height: 48px; }
+            .table-container { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+            /* `#ownerTicketsTable { min-width: 620px }` used to live here to make
+               the 8-column table scrollable. Below 900px that table is CARDS now
+               (shared ROW CARD SWAP in style.css), and a `min-width` on a
+               display:block card stack only forces a horizontal overflow of the
+               whole page — so it is gone rather than overridden. */
+            #ownerKpiCards { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+        }
+
+        /* Small phones: keep a compact two-up KPI grid */
+        @media (max-width: 620px) {
+            .card { padding: 14px 16px; }
+            #ownerKpiCards { gap: 10px; }
+            #ownerPageTitle { font-size: 1rem; }
+            /* The big role badge shrinks WITH the title so the header row
+               still fits a 320px phone (menu toggle + title + badge). */
+            #ownerUserRoleBadge { font-size: 0.8rem; padding: 6px 12px; }
+        }
+
+        /* Extra-small phones: single-column KPIs + compact panel */
+        @media (max-width: 430px) {
+            #ownerKpiCards { grid-template-columns: 1fr; gap: 10px; }
+            .owner-panel { padding: 12px; }
+            .owner-branch-list .quick-status-item { padding: 10px 12px; }
+            #ownerUserEmail { max-width: 120px; }
+            #ownerPageTitle { font-size: 0.95rem; }
+            #ownerUserRoleBadge { font-size: 0.72rem; padding: 5px 10px; }
+        }
+    </style>
+</head>
+<body>
+    <aside class="sidebar" id="ownerSidebar">
+        <div class="sidebar-header">
+            <div class="logo">
+                <img src="https://jiangnanhotpot.com/cdn/shop/files/jiangnan-logo-transparent_40f90d62-6f5e-4f34-9a1a-cf948a106904.png?v=1721972026" alt="Jiangnan Logo" class="brand-logo" onerror="this.onerror=null;this.src='header.png';">
+                <span class="logo-text" style="display:none;">Dashboard</span>
+            </div>
+        </div>
+
+        <nav class="sidebar-nav" id="ownerSidebarNav">
+            <button class="nav-item active" data-tab="overview">
+                <i class="fas fa-home"></i>
+                <span>Overview</span>
+            </button>
+            <button class="nav-item" data-tab="tickets">
+                <i class="fas fa-ticket-alt"></i>
+                <span>Tickets</span>
+            </button>
+            <!-- ===== HR HANDOFF =====
+                 Violation reports a superadmin has reviewed and transferred
+                 (violations.hrStatus == 'transferred'). js/hr-violations.js
+                 shows this item to the `hr` role ONLY and hides it again for
+                 owners, who must never see CCTV violation data.
+                 The list is strictly read-only — see firestore.rules. -->
+            <button class="nav-item u-hidden" data-tab="violations" id="hrViolationsNavItem" style="display:none;">
+                <i class="fas fa-video"></i>
+                <span>Violations</span>
+            </button>
+            <!-- ===== AREA MANAGER HANDOFF =====
+                 Reports a superadmin reviewed and transferred to an AREA
+                 MANAGER (violations.managerStatus == 'transferred').
+
+                 ⚠️ SEPARATE ITEM FROM #hrViolationsNavItem, NOT A REUSE. Both
+                 roles get a nav item labelled "Violations", driven by the SAME
+                 generic switchOwnerTab() (it resolves the section as
+                 `tab` + Capitalised(tabId), hence data-tab="ownerViolations" ->
+                 id="tabOwnerViolations"). Reusing the HR item would give one
+                 role the other's list, and would collide with HR's
+                 `applyRole()` which hides #tabViolations for owners.
+
+                 js/owner-violations.js reveals this only for the stored role
+                 'owner', and scopes the list to that manager's branches.
+                 Strictly read-only, exactly like HR's. -->
+            <button class="nav-item u-hidden" data-tab="ownerViolations" id="ownerViolationsNavItem" style="display:none;">
+                <i class="fas fa-video"></i>
+                <span>Violations</span>
+            </button>
+        </nav>
+
+        <div class="sidebar-footer">
+            <button class="logout-btn-sidebar" id="ownerLogoutBtn">
+                <i class="fas fa-sign-out-alt"></i>
+                <span>Logout</span>
+            </button>
+        </div>
+    </aside>
+
+    <div class="mobile-nav-backdrop" id="ownerSidebarBackdrop" aria-hidden="true"></div>
+
+    <main class="main-content" id="ownerMainContent">
+        <header class="top-header">
+            <div class="header-left">
+                <button type="button" class="menu-toggle" id="ownerSidebarToggle" aria-label="Toggle menu">
+                    <i class="fas fa-bars"></i>
+                </button>
+                <h1 class="page-title" id="ownerPageTitle">Dashboard</h1>
+                <!-- ===== BIG ROLE INDICATOR =====
+                     Same #ownerUserRoleBadge element that used to sit in the
+                     header-right auth row — MOVED, never cloned: its id is
+                     parsed back by js/hr-violations.js and js/owner-violations.js
+                     (readRole falls back to the badge TEXT), and
+                     setActiveUser() rewrites its className on every role
+                     resolve, so the element must survive with one identity.
+                     It is deliberately BIG and sits beside the page title:
+                     this is the "who am I / what can I do here" signal, and a
+                     0.7rem chip in the far corner was reading as chrome.
+                     ⚠️ The size lives on the ID (#ownerUserRoleBadge), not a
+                     class — setActiveUser() sets `className = 'role-badge …'`
+                     every time, which would wipe any class-based sizing. The
+                     role COLOURS stay on .role-badge.owner/hr/superadmin/viewer
+                     (style.css + theme.css), so both themes are covered for free. -->
+                <span id="ownerUserRoleBadge" class="role-badge viewer">Loading…</span>
+            </div>
+            <div class="header-right">
+                <div class="header-actions">
+                    <!-- ===== AREA MANAGER: "+Ticket" =====
+                         This entry point was previously removed for EVERY role
+                         because tickets were only filed from the public
+                         submit-ticket.html. It is back for the Area Manager
+                         alone (stored role 'owner'): they raise tickets for
+                         their own branches, whereas HR and superadmin work the
+                         queue rather than adding to it.
+
+                         It is a <button>, NOT an <a> to the public form. The
+                         submission form now lives in js/owner-ticket-form.js and
+                         opens as a FULL-SCREEN modal, so filing a ticket no
+                         longer means navigating away from the dashboard and
+                         losing the manager's place in it. A real <button> is
+                         also the correct element: it performs an action rather
+                         than navigating, so it must not be focusable as a link
+                         and must not be middle-clickable.
+
+                         submit-ticket.html is NOT deleted — it stays as the
+                         login-free status portal that js/email.js links
+                         requesters to, and the public Track modal still works
+                         from it. Only the form and the manual Track button came
+                         out of it.
+
+                         ⚠️ `hidden` + `u-hidden` are BOTH set initially, and
+                         js/owner-dashboard.js (syncNewTicketButton) reveals it
+                         only once the role has actually resolved to the Area
+                         Manager. The role arrives asynchronously from
+                         Firestore, so anything rendered visible by default
+                         would flash on screen for HR / superadmin on every
+                         load. The .header-actions wrapper is kept because the
+                         dark-mode toggle below lives in it. -->
+                    <button type="button" class="btn btn-primary btn-add" id="btnOwnerNewTicket" hidden>
+                        <i class="fas fa-plus"></i>
+                        <span>Ticket</span>
+                    </button>
+                    <button type="button" class="icon-btn" data-theme-toggle aria-label="Switch to dark mode" title="Switch to dark mode">
+                        <i class="fas fa-moon"></i>
+                    </button>
+                </div>
+                <div class="header-auth-status" id="ownerAuthStatus">
+                    <span class="auth-dot"></span>
+                    <span id="ownerUserEmail">Loading...</span>
+                    <!-- The role badge LIVES BESIDE THE PAGE TITLE now (see
+                         .header-left) — it is the role indicator, not part of
+                         the identity row. Same element, same id. -->
+                </div>
+            </div>
+        </header>
+
+        <!-- ===== Mockup reproduction: identity strip — PHONE ONLY (<=899px) =====
+             The pasted mockup's emerald sub-header. The DOM is ORIGINAL-DESKTOP
+             FIRST: #ownerAuthStatus lives in .header-right exactly where it
+             always did, so at >=900px the header is unchanged and the strip is
+             display:none (the default rule in the inline <style>). On phones,
+             js/owner-dashboard.js (placeOwnerAuthStatus) moves the auth row
+             into the slot below — same element, same ids, so setActiveUser()'s
+             email/role writes and hr-violations.js's badge read are untouched.
+             Without JS the auth row simply stays in the header and the strip
+             carries only its label. -->
+        <div class="owner-subhead">
+            <span class="owner-subhead-label">
+                <i class="fas fa-shield-halved"></i>
+                <span>Assigned Branches View</span>
+            </span>
+            <span class="owner-subhead-auth" id="ownerSubheadAuth"></span>
+        </div>
+
+        <section class="tab-content active" id="tabOverview">
+            <div class="section-header owner-section-header">
+                <div>
+                    <h2>Summary</h2>
+                    <p>View metrics and branches you can access.</p>
+                </div>
+                <div class="owner-toolbar">
+                    <div class="owner-filter-wrap">
+                        <label for="ownerBranchFilter">Branch</label>
+                        <select id="ownerBranchFilter"></select>
+                    </div>
+                </div>
+            </div>
+
+            <div class="summary-cards summary-cards-6 owner-summary-grid" id="ownerKpiCards">
+                <div class="card card-total">
+                    <div class="card-icon"><i class="fas fa-calendar-check"></i></div>
+                    <div class="card-info">
+                        <div class="card-value" id="totalMonthlyReports">0</div>
+                        <div class="card-label">Total Monthly Reports</div>
+                    </div>
+                </div>
+                <div class="card card-online">
+                    <div class="card-icon"><i class="fas fa-file-alt"></i></div>
+                    <div class="card-info">
+                        <div class="card-value" id="totalAssignedReports">0</div>
+                        <div class="card-label">Total Assigned Reports</div>
+                    </div>
+                </div>
+                <div class="card card-pending">
+                    <div class="card-icon"><i class="fas fa-code-branch"></i></div>
+                    <div class="card-info">
+                        <div class="card-value" id="totalActiveBranches">0</div>
+                        <div class="card-label">Assigned Branches</div>
+                    </div>
+                </div>
+                <div class="card card-progress">
+                    <div class="card-icon"><i class="fas fa-user-shield"></i></div>
+                    <div class="card-info">
+                        <div class="card-value" id="accessLevelValue">—</div>
+                        <div class="card-label">My Access Level</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ============================================================ -->
+            <!-- OVERVIEW CHARTS: tickets-filed trend + status breakdown      -->
+            <!-- Same chart-container / dash-chart-head / chart-wrapper idiom -->
+            <!-- as main.html, so the shared style.css rules apply unchanged. -->
+            <!-- ============================================================ -->
+            <div class="charts-row" id="ownerChartsRow">
+                <div class="chart-container">
+                    <div class="dash-chart-head">
+                        <h3 class="chart-title">Tickets Filed</h3>
+                        <span class="dash-chart-pill" id="ownerTrendPill">—</span>
+                    </div>
+                    <div class="chart-wrapper">
+                        <canvas id="ownerTrendChart" role="img" aria-label="Tickets filed per month, assigned branches"></canvas>
+                    </div>
+                </div>
+                <div class="chart-container">
+                    <div class="dash-chart-head">
+                        <h3 class="chart-title">Status Breakdown</h3>
+                        <span class="dash-chart-pill" id="ownerStatusPill">—</span>
+                    </div>
+                    <div class="chart-wrapper">
+                        <canvas id="ownerStatusChart" role="img" aria-label="Ticket status breakdown, assigned branches"></canvas>
+                    </div>
+                </div>
+            </div>
+
+            <div class="section-header owner-section-header owner-panel-header">
+                <div>
+                    <h2>Assigned Branches</h2>
+                    <p>Branches available for your account.</p>
+                </div>
+            </div>
+            <div class="owner-panel">
+                <div id="ownerBranchList" class="quick-status-list owner-branch-list"></div>
+                <div class="owner-permissions-block">
+                    <div class="owner-permissions-header">
+                        <h3>My Feature Permissions</h3>
+                    </div>
+                    <div id="ownerPermSummary" class="owner-permissions-summary"></div>
+                </div>
+            </div>
+        </section>
+
+        <section class="tab-content" id="tabTickets">
+            <!-- ⚠️ STACKED, not side-by-side. `.section-header` (style.css) is a
+                 flex ROW with `justify-content: space-between`, so the heading
+                 and the whole toolbar were competing for one line. The toolbar
+                 needs ~1,250px (search capped at 320px + three selects at
+                 ~170px each + gaps) while the content column is only
+                 ~1,020–1,180px once the sidebar is subtracted — so
+                 `flex-wrap: wrap` broke the controls into an unpredictable
+                 3-then-1 / 2-then-2 block with the heading still vertically
+                 centred beside it. Stacking gives the controls the full width
+                 and makes any wrap deliberate. Scoped to the Tickets section
+                 only: Overview carries a single filter and never crowded. -->
+            <div class="section-header owner-section-header owner-section-header--stacked">
+                <div>
+                    <h2>Tickets</h2>
+                    <p>Approved tickets at the branches assigned to you.</p>
+                    <span class="owner-window-note" id="ownerWindowNote"></span>
+                </div>
+                <div class="toolbar owner-toolbar owner-filter-card">
+                    <div class="search-box">
+                        <i class="fas fa-search"></i>
+                        <input id="ownerTicketSearch" type="search" placeholder="Search tickets...">
+                    </div>
+                    <div class="filter-group owner-filter-group">
+                        <!-- ⚠️ THIS REPLACES #ownerTicketStatusFilter. That
+                             dropdown listed seven statuses (Pending / In
+                             Progress / For Revision / Pending Approval /
+                             Resolved) but the role gate force-locked it to
+                             "Resolved" and disabled it for EVERY role that can
+                             reach this page, so it occupied ~170px and could
+                             never be used — a dead control that reads as a
+                             broken filter. This asks the question that
+                             actually separates the rows now that the list is
+                             approved-only: is the viewing window still open?
+
+                             Plain labels on purpose — no counts. 'all' is first
+                             so the default view hides nothing on load, and an
+                             unrecognised value falls through to "show
+                             everything" in the JS, so adding an option before
+                             the script is updated cannot blank the list. -->
+                        <select id="ownerTicketAccessFilter" aria-label="Filter by viewing access">
+                            <option value="all">All</option>
+                            <option value="active">Not expired</option>
+                            <option value="expired">Expired</option>
+                        </select>
+                    </div>
+                    <div class="filter-group owner-filter-group">
+                        <!-- ⚠️ MANAGER-ONLY STATUS FILTER. HR and superadmin rows are
+                             always approved (always "Resolved"), so for them this
+                             would be a dead control — js/owner-dashboard.js
+                             (applyViewerExpiryChrome) hides it exactly like the
+                             Access filter. The four options are the exact words
+                             the row badges speak (ticketDisplayStatus), so the
+                             filter and the badge can never disagree. 'all' is
+                             first so nothing hides on load; an unrecognised value
+                             falls through to "show everything" in the JS, so
+                             adding an option before the script is updated cannot
+                             blank the list. -->
+                        <select id="ownerTicketStatusFilter" aria-label="Filter by ticket status">
+                            <option value="all">All Statuses</option>
+                            <option value="Pending">Pending</option>
+                            <option value="In Progress">In Progress</option>
+                            <option value="Pending Approval">Pending Approval</option>
+                            <option value="Resolved">Resolved</option>
+                        </select>
+                    </div>
+                    <div class="filter-group owner-filter-group">
+                        <select id="ownerTicketBranchFilter"></select>
+                    </div>
+                    <div class="filter-group owner-filter-group">
+                        <select id="ticketPeriodFilter" aria-label="Filter by date created">
+                            <option value="daily" selected>Today</option>
+                            <option value="weekly">Last 7 days</option>
+                            <option value="monthly">This month</option>
+                            <option value="all">All</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+
+            <div class="table-container">
+                <table class="data-table row-card-table" id="ownerTicketsTable">
+                    <thead>
+                        <tr>
+                            <th>Ticket No.</th>
+                            <th>Date Created</th>
+                            <th>Branch</th>
+                            <th>Reporter</th>
+                            <th>Incident</th>
+                            <th>Status</th>
+                            <th>Access</th>
+                            <th>Actions</th>
+                            <th class="approval-card-th" aria-hidden="true"><span class="u-hidden">Card</span></th>
+                        </tr>
+                    </thead>
+                    <tbody id="ownerTicketsBody">
+                        <tr><td colspan="9" class="empty-state"><i class="fas fa-ticket-alt"></i><p>No tickets found for your branches.</p></td></tr>
+                    </tbody>
+                </table>
+                <div class="pagination" id="ownerTicketPagination">
+                    <span class="page-info">Loading...</span>
+                </div>
+            </div>
+        </section>
+
+        <!-- ============================================================ -->
+        <!-- TAB: VIOLATIONS (HR only — read-only)                       -->
+        <!-- ============================================================ -->
+        <!-- Reports a superadmin reviewed and transferred to HR. HR can
+             read the details and the CCTV evidence and print the report,
+             but there is deliberately NO edit / delete / transfer control
+             anywhere on this tab: firestore.rules gives the HR role no
+             write access to the `violations` collection at all. -->
+        <section class="tab-content" id="tabViolations">
+
+            <div class="section-header owner-section-header">
+                <div>
+                    <h2><i class="fas fa-video u-icon-primary u-icon-gap"></i>Transferred Violations</h2>
+                    <p style="color:var(--text-muted);font-size:0.85rem;margin-top:4px;">
+                        CCTV violations reviewed and sent to you by the superadmin. View and print only &mdash; these reports cannot be edited here.
+                    </p>
+                </div>
+            </div>
+
+            <div class="toolbar">
+                <div class="search-box">
+                    <i class="fas fa-search"></i>
+                    <input type="text" id="hrViolationSearch" placeholder="Search subject, store, location, reporter...">
+                </div>
+                <div class="sort-group">
+                    <label><i class="fas fa-store"></i></label>
+                    <select id="hrViolationStoreFilter">
+                        <option value="all">All Stores</option>
+                    </select>
+                </div>
+                <div class="sort-group">
+                    <label for="violationPeriodFilter"><i class="fas fa-calendar-day"></i></label>
+                    <select id="violationPeriodFilter" title="Reports are listed by filing date — older ones stay in the database">
+                        <option value="daily" selected>Today</option>
+                        <option value="weekly">Last 7 days</option>
+                        <option value="monthly">This month</option>
+                        <option value="all">All reports</option>
+                    </select>
+                </div>
+            </div>
+
+            <div class="table-container">
+                <table class="data-table row-card-table" id="hrViolationsTable">
+                    <thead>
+                        <tr>
+                            <th>Report No.</th>
+                            <th>Report Date</th>
+                            <th>Incident Date/Time</th>
+                            <th>Store</th>
+                            <th>Subject</th>
+                            <th>Reporter</th>
+                            <th>Files</th>
+                            <th>Actions</th>
+                            <th class="approval-card-th" aria-hidden="true"><span class="u-hidden">Card</span></th>
+                        </tr>
+                    </thead>
+                    <tbody id="hrViolationsBody">
+                        <tr><td colspan="9" class="empty-state"><i class="fas fa-video"></i><p>No violation reports have been transferred to you yet.</p></td></tr>
+                    </tbody>
+                </table>
+                <div class="pagination" id="hrViolationPagination">
+                    <span class="page-info">Loading...</span>
+                </div>
+            </div>
+        </section>
+
+        <!-- ============================================================ -->
+        <!-- TAB: VIOLATIONS (Area Manager — read-only, branch-scoped)   -->
+        <!-- ============================================================ -->
+        <!-- Reports a superadmin reviewed and transferred to an AREA     -->
+        <!-- MANAGER (violations.managerStatus == 'transferred').          -->
+        <!--                                                              -->
+        <!-- ⚠️ DISTINCT FROM #tabViolations ABOVE, which is HR's. They    -->
+        <!-- cannot be merged: they are gated on different roles, they    -->
+        <!-- read different fields (hrStatus vs managerStatus), and the   -->
+        <!-- Area Manager one additionally scopes to that manager's own   -->
+        <!-- assigned branches. switchOwnerTab() resolves this section     -->
+        <!-- from data-tab="ownerViolations".                              -->
+        <!--                                                              -->
+        <!-- STRICTLY READ-ONLY, in the same two layers as HR's:            -->
+        <!--   1. firestore.rules gives the `owner` role no create/update/ -->
+        <!--      delete access to `violations` at all — only reads.       -->
+        <!--   2. There is no edit / delete / transfer control in the      -->
+        <!--      markup below. Only view + download the report PDF.       -->
+        <!--                                                              -->
+        <!-- ⚠️ BRANCH SCOPING IS ENFORCED IN THE UI ONLY (see            -->
+        <!-- js/owner-violations.js). The rules cannot prove it because an -->
+        <!-- Area Manager's branch list lives on their user document, not  -->
+        <!-- on the queried collection. The long note above `allow read`   -->
+        <!-- in firestore.rules explains what closing that gap would need. -->
+        <section class="tab-content" id="tabOwnerViolations">
+
+            <div class="section-header owner-section-header">
+                <div>
+                    <h2><i class="fas fa-video u-icon-primary u-icon-gap"></i>Violation Reports</h2>
+                    <p style="color:var(--text-muted);font-size:0.85rem;margin-top:4px;">
+                        CCTV violations reviewed and sent to you by the superadmin, for your branches. View and print only &mdash; these reports cannot be edited here.
+                    </p>
+                </div>
+            </div>
+
+            <div class="toolbar">
+                <div class="search-box">
+                    <i class="fas fa-search"></i>
+                    <input type="text" id="ownerViolationSearch" placeholder="Search subject, store, location, reporter...">
+                </div>
+                <div class="sort-group">
+                    <label><i class="fas fa-store"></i></label>
+                    <select id="ownerViolationStoreFilter">
+                        <option value="all">All Stores</option>
+                    </select>
+                </div>
+                <div class="sort-group">
+                    <!-- ⚠️ DISTINCT ID from HR's #violationPeriodFilter — BOTH tabs
+                         exist on this page, and a duplicate id would make
+                         getElementById() hand each module the OTHER tab's select.
+                         Same four buckets and same "Today" default as the HR and
+                         superadmin tabs, so the three surfaces behave alike.
+                         Measured from the REPORT (filed) date — see
+                         js/owner-violations.js applyFilters(). -->
+                    <label for="ownerViolationPeriodFilter"><i class="fas fa-calendar-day"></i></label>
+                    <select id="ownerViolationPeriodFilter" title="Reports are listed by filing date — older ones stay in the database">
+                        <option value="daily" selected>Today</option>
+                        <option value="weekly">Last 7 days</option>
+                        <option value="monthly">This month</option>
+                        <option value="all">All reports</option>
+                    </select>
+                </div>
+            </div>
+
+            <div class="table-container">
+                <table class="data-table row-card-table" id="ownerViolationsTable">
+                    <thead>
+                        <tr>
+                            <th>Report No.</th>
+                            <th>Report Date</th>
+                            <th>Incident Date/Time</th>
+                            <th>Store</th>
+                            <th>Subject</th>
+                            <th>Reporter</th>
+                            <th>Files</th>
+                            <th>Actions</th>
+                            <th class="approval-card-th" aria-hidden="true"><span class="u-hidden">Card</span></th>
+                        </tr>
+                    </thead>
+                    <tbody id="ownerViolationsBody">
+                        <tr><td colspan="9" class="empty-state"><i class="fas fa-video"></i><p>No violation reports have been transferred to you yet.</p></td></tr>
+                    </tbody>
+                </table>
+                <div class="pagination" id="ownerViolationPagination">
+                    <span class="page-info">Loading...</span>
+                </div>
+            </div>
+        </section>
+
+    </main>
+
+    <!-- ============================================================ -->
+    <!-- MODAL: TRANSFERRED VIOLATION DETAILS (HR — read-only)        -->
+    <!-- ============================================================ -->
+    <div class="modal-overlay" id="hrViolationModal">
+        <div class="modal-container modal-lg">
+            <div class="modal-header">
+                <h2><i class="fas fa-video"></i> <span id="hrViolationModalTitle">Violation Report</span></h2>
+                <!-- Printing is a VIEW action, so it stays available to HR even
+                     though the footer below holds no edit/delete controls. -->
+                <button type="button" class="btn btn-sm btn-primary" id="btnHrViolationReport" title="Download the report PDF to your computer">
+                    <i class="fas fa-file-pdf"></i> <span>Download Report</span>
+                </button>
+                <button class="modal-close" id="closeHrViolationModal">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="modal-fields" id="hrViolationModalBody">
+                    <p style="color:var(--text-muted);">Loading...</p>
+                </div>
+
+                <div class="ticket-attachments-section" style="margin-top:22px;">
+                    <h3 class="section-title"><i class="fas fa-paperclip"></i> CCTV Footage / Evidence</h3>
+                    <div id="hrViolationAttachmentsGrid" class="attachments-grid">
+                        <p class="u-section-sub">No attachments yet.</p>
+                    </div>
+                </div>
+            </div>
+            <!-- Intentionally empty: HR has no write actions on a report. -->
+        </div>
+    </div>
+
+    <!-- ============================================================ -->
+    <!-- MODAL: TRANSFERRED VIOLATION DETAILS (Area Manager, read-only) -->
+    <!-- ============================================================ -->
+    <!-- A SEPARATE dialog from #hrViolationModal, not a shared one. They look
+         identical but belong to different roles reading different documents,
+         and a shared dialog would mean one role's open-report state could be
+         shown against the other's data.
+
+         There is deliberately NO edit / delete / transfer control in the footer:
+         firestore.rules gives the `owner` role no write access to `violations`,
+         so such a control could not work even if it were added. -->
+    <div class="modal-overlay" id="ownerViolationModal">
+        <div class="modal-container modal-lg">
+            <div class="modal-header">
+                <h2><i class="fas fa-video"></i> <span id="ownerViolationModalTitle">Violation Report</span></h2>
+                <!-- Printing is a VIEW action, so it stays available. -->
+                <button type="button" class="btn btn-sm btn-primary" id="btnOwnerViolationReport" title="Download the report PDF to your computer">
+                    <i class="fas fa-file-pdf"></i> <span>Download Report</span>
+                </button>
+                <button class="modal-close" id="closeOwnerViolationModal">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="modal-fields" id="ownerViolationModalBody">
+                    <p style="color:var(--text-muted);">Loading...</p>
+                </div>
+
+                <div class="ticket-attachments-section" style="margin-top:22px;">
+                    <h3 class="section-title"><i class="fas fa-paperclip"></i> CCTV Footage / Evidence</h3>
+                    <div id="ownerViolationAttachmentsGrid" class="attachments-grid">
+                        <p class="u-section-sub">No attachments yet.</p>
+                    </div>
+                </div>
+            </div>
+            <!-- Intentionally empty: read-only, same as HR's dialog. -->
+        </div>
+    </div>
+
+    <!-- ============================================================ -->
+    <!-- MODAL: REPORT DETAILS                                        -->
+    <!-- ============================================================ -->
+    <div class="modal-overlay" id="ownerReportModal">
+        <div class="modal-container modal-lg">
+            <div class="modal-header">
+                <h2><i class="fas fa-ticket-alt"></i> <span>Ticket Details</span></h2>
+                <div style="display:flex;align-items:center;gap:12px;">
+                    <span class="status-badge" id="ownerReportDetailsStatus" style="display:none;">Resolved</span>
+                    <button class="modal-close" id="closeOwnerReportModal">&times;</button>
+                </div>
+            </div>
+            <div class="modal-body">
+                <div class="approval-review-grid" id="ownerReportModalBody">
+                    <p style="color:var(--text-muted);">Loading...</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-firestore.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-auth.js"></script>
+    <!-- jsPDF: builds the downloadable "COMMAND CENTER REPORT" for a
+         transferred violation. Without it the Download button falls back to
+         opening a print-friendly page (see js/violation-report.js). -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="firebase.js"></script>
+    <!-- ===== Error Reporter: captures crashes + unhandled rejections ===== -->
+    <script src="js/error-reporter.js"></script>
+    <script src="js/auth.js"></script>
+        <script src="js/notifications.js"></script>
+    <!-- ===== HR <-> Superadmin chat =====
+         Loaded after firebase.js so the global `db` / `auth` exist. -->
+    <script src="js/chat.js"></script>
+<!-- Unsend confirm modal — loads AFTER chat.js so window.ChatService exists;
+     it calls ChatService.unsendMessage() behind the author-only rules gate. -->
+<script src="js/chat-unsend.js"></script>
+    <!-- Refresh-state manager: keeps the user on the current tab/modal after F5 -->
+    <script src="js/refresh-state.js"></script>
+    <!-- Theme manager: dark/light toggle + notification bell -->
+    <script src="js/theme.js"></script>
+    <!-- ===== In-app attachment viewer (image / video / PDF lightbox) =====
+         THE SAME dialog main.html uses. This page used to render every
+         attachment as a bare <a target="_blank">, so ticket files opened in
+         a new tab instead of this modal -- because neither the dialog NOR its
+         click handling existed here. The module injects the dialog, so this
+         page needs no markup for it. It also supplies the shared attachment
+         card builder, so this page renders the SAME .attachment-item tiles --
+         with real image/video thumbnails -- as main.html. -->
+    <script src="js/attachment-viewer.js"></script>
+    <script src="js/owner-dashboard.js"></script>
+    <!-- ===== Area Manager ticket submission form (full-screen modal) =====
+         Loaded AFTER owner-dashboard.js on purpose: the dashboard installs the
+         context bridge (getOwnerAssignedBranches / getOwnerDisplayName) that
+         the form reads when it opens, and it owns the "+Ticket" button that
+         calls OwnerTicketForm.open(). It only DEFINES window.OwnerTicketForm at
+         load — the modal is injected on first open, so no markup is added to
+         the page for HR or superadmin, who never see the button. -->
+    <script src="js/owner-ticket-form.js"></script>
+    <!-- ===== Transferred violations (HR only, read-only) =====
+         Loads AFTER owner-dashboard.js because it hooks into the role that
+         setActiveUser() resolves, and after js/violation-report.js so the
+         shared PDF builder is available. -->
+    <script src="js/violation-report.js"></script>
+    <script src="js/hr-violations.js"></script>
+    <!-- ===== HR coordination remarks (shared "has an NOV been issued?" log) =====
+         Loads after firebase.js (for db/auth) and needs only the shared modal
+         CSS + showToast. It writes its own append-only `remarks` collection, so
+         it does NOT touch the read-only violations/ticket documents. Exposed as
+         window.Remarks; the ticket and violation rows call
+         window.Remarks.openFromButton(this). -->
+    <script src="js/remarks.js"></script>
+    <!-- ===== HR coordination file uploads (NOV document attachments) ====
+         Loads after js/remarks.js; mirrors its pattern. Uploads go to
+         Cloudinary and metadata is stored in the `hr_uploads` collection,
+         keyed by targetKey ('tickets/<id>' | 'violations/<id>'). Exposed as
+         window.HrUploads; the ticket and violation rows call
+         window.HrUploads.openFromButton(this). -->
+    <script src="js/hr-uploads.js"></script>
+    <!-- ===== Area Manager violations (read-only, branch-scoped) =====
+         Loads AFTER owner-dashboard.js because it reads that module's
+         getOwnerRole() / getOwnerAssignedBranches() to gate the tab and scope
+         the list, and after js/violation-report.js for the shared PDF builder.
+
+         ⚠️ Deliberately a SEPARATE module from js/hr-violations.js rather than
+         one parameterised by role. The two read different Firestore fields
+         (hrStatus vs managerStatus), use different listeners, and only one of
+         them is branch-scoped. Merging them would put a role check on every
+         branch of the rendering path, where a mistake shows up as a hidden
+         control that still works — much harder to spot than in two small files
+         that are each correct on their own. -->
+    <script src="js/owner-violations.js"></script>
+    <!-- ===== Command palette + keyboard shortcuts (Ctrl/Cmd+K) =====
+         Loaded LAST so it can see the owner page's DOM. It has no
+         .nav-item[data-tab] elements, so the list is just the actions this
+         role can actually take — never an operator/superadmin command. -->
+    <script src="js/command-palette.js"></script>
+</body>
+</html>

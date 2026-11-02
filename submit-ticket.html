@@ -1,0 +1,2360 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CCTV Command Center - Submit Ticket</title>
+    <!-- Pre-paint theme: apply saved dark/light theme BEFORE first paint (no flash) -->
+<script>(function(){try{var t=localStorage.getItem('rcms_theme');if(!t){t='light';}document.documentElement.setAttribute('data-theme',t);}catch(e){document.documentElement.setAttribute('data-theme','light');}})();</script>
+    <!-- App icon + installable manifest (see main.html for the theme_color note) -->
+    <link rel="icon" href="tamang logo.png" type="image/png">
+    <link rel="apple-touch-icon" href="tamang logo.png">
+    <link rel="manifest" href="manifest.json">
+    <meta name="theme-color" id="themeColorMeta" content="#72bf6a">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-firestore.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-auth.js"></script>
+    <link rel="stylesheet" href="style.css">
+    <!-- Theme System: dark mode + shared components (loaded AFTER style.css) -->
+    <link rel="stylesheet" href="theme.css">
+<style>
+        body { display: flex; justify-content: center; align-items: flex-start; padding: 40px 20px; min-height: 100vh; }
+        .form-card { max-width: 680px; width: 100%; }
+
+        /* ---- Track Ticket Modal Styles (Redesigned) ---- */
+
+/* Input wrapper — each field group */
+        .track-form-group {
+            flex: 1;
+            min-width: 0;
+        }
+        .track-input-row {
+            display: flex;
+            gap: 12px;
+            margin-bottom: 6px;
+        }
+        .track-form-group label {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 0.82rem;
+            font-weight: 600;
+            color: var(--text-secondary);
+            margin-bottom: 7px;
+        }
+        .track-form-group label i {
+            color: var(--color-primary);
+            font-size: 0.85rem;
+            width: 16px;
+            text-align: center;
+        }
+
+        /* The input itself */
+        .track-input {
+            width: 100%;
+            padding: 12px 16px;
+            background: var(--bg-input);
+            border: 1.5px solid var(--border-color);
+            border-radius: 10px;
+            color: var(--text-primary);
+            font-size: 0.93rem;
+            transition: all 0.2s ease;
+            outline: none;
+            font-family: 'Inter', sans-serif;
+            box-sizing: border-box;
+        }
+        .track-input:focus {
+            border-color: var(--color-primary);
+            box-shadow: 0 0 0 4px rgba(37, 99, 235, 0.12);
+        }
+        .track-input::placeholder {
+            color: var(--text-muted);
+            font-size: 0.88rem;
+        }
+        .track-input.input-error {
+            border-color: var(--color-danger) !important;
+            box-shadow: 0 0 0 4px rgba(220, 38, 38, 0.12) !important;
+        }
+
+        /* Lookup button row */
+        .track-search-row {
+            margin-bottom: 6px;
+        }
+        .track-search-row .btn {
+            width: 100%;
+            padding: 13px 22px;
+            font-size: 0.95rem;
+            border-radius: 10px;
+            justify-content: center;
+            background: linear-gradient(135deg, var(--color-primary), #4f46e5);
+            transition: all 0.25s ease;
+        }
+        .track-search-row .btn:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 6px 20px rgba(37, 99, 235, 0.35);
+        }
+        .track-search-row .btn:active {
+            transform: translateY(0);
+        }
+
+        /* Validation error banner */
+        .track-validation-error {
+            display: none;
+            align-items: center;
+            gap: 14px;
+            padding: 16px 18px;
+            /* Theme-aware (was a hardcoded pale-red card with fixed dark text,
+               which became unreadable in dark mode). */
+            background: var(--color-danger-bg);
+            border: 1.5px solid var(--color-danger-border, var(--color-danger));
+            border-radius: 10px;
+            color: var(--text-primary);
+            font-size: 0.90rem;
+            font-weight: 500;
+            margin-top: 16px;
+            margin-bottom: 0;
+            animation: slideIn 0.3s ease;
+        }
+        .track-validation-error i {
+            font-size: 1.3rem;
+            flex-shrink: 0;
+            color: var(--color-danger);
+        }
+
+        /* ---- Request Additional Footage ---- */
+        #trackFootageSection {
+            margin-top: 24px;
+            padding-top: 24px;
+            border-top: 2px solid var(--border-color);
+            display: none;
+            flex-direction: column;
+            gap: 24px;
+        }
+        #trackFootageBox {
+            display: flex;
+            flex-direction: column;
+            gap: 18px;
+            padding: 24px;
+            background: var(--bg-card);
+            border: 1.5px solid var(--border-color);
+            border-radius: 14px;
+            box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
+            animation: slideDown 0.3s ease;
+        }
+        @keyframes slideDown {
+            from { opacity: 0; transform: translateY(-12px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        #trackFootageBox label {
+            font-size: 0.93rem;
+            font-weight: 650;
+            color: var(--text-primary);
+            align-self: flex-start;
+            margin: 0;
+            display: flex;
+            align-items: center;
+            gap: 9px;
+        }
+        #trackFootageBox label i {
+            color: var(--color-primary);
+            font-size: 1rem;
+            width: 18px;
+            text-align: center;
+        }
+        #trackFootageBox textarea.track-input {
+            min-height: 130px;
+            max-height: 320px;
+            resize: vertical;
+            font-family: 'Inter', sans-serif;
+            line-height: 1.6;
+            padding: 14px 16px;
+            background: var(--bg-input);
+            border: 1.5px solid var(--border-color);
+            border-radius: 10px;
+            color: var(--text-primary);
+            transition: all 0.2s ease;
+        }
+        #trackFootageBox textarea.track-input:focus {
+            border-color: var(--color-primary);
+            box-shadow: 0 0 0 5px rgba(37, 99, 235, 0.12);
+            outline: none;
+        }
+        #trackFootageBox textarea.track-input::placeholder {
+            color: var(--text-muted);
+            font-size: 0.88rem;
+        }
+        .track-footage-actions {
+            display: flex;
+            gap: 12px;
+            justify-content: flex-end;
+            margin-top: 8px;
+        }
+        .track-footage-actions .btn {
+            min-width: 140px;
+            padding: 12px 22px;
+            font-size: 0.93rem;
+            font-weight: 600;
+            border-radius: 10px;
+            border: none;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+        }
+        .track-footage-actions .btn-secondary {
+            background: var(--bg-tertiary);
+            color: var(--text-primary);
+            border: 1.5px solid var(--border-color);
+        }
+        .track-footage-actions .btn-secondary:hover {
+            background: var(--bg-secondary);
+            border-color: var(--text-muted);
+            transform: translateY(-1px);
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+        }
+        .track-footage-actions .btn-primary {
+            background: linear-gradient(135deg, var(--color-primary), #1e40af);
+            color: white;
+            box-shadow: 0 2px 12px rgba(37, 99, 235, 0.3);
+        }
+        .track-footage-actions .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(37, 99, 235, 0.4);
+        }
+        .track-footage-actions .btn-primary:active {
+            transform: translateY(0);
+        }
+        .track-footage-actions .btn-primary:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: none;
+        }
+        /* Footage request view — shown in place of ticket details */
+        #trackFootageSection {
+            padding: 22px 26px;
+            gap: 14px;
+        }
+        #trackFootageSection .track-footage-actions {
+            margin-top: 6px;
+        }
+
+        .track-success-notice {
+            display: none;
+            align-items: center;
+            gap: 14px;
+            padding: 16px 20px;
+            /* Theme-aware (was a hardcoded pale-green card with fixed dark text,
+               which became unreadable in dark mode). */
+            background: var(--color-resolved-bg);
+            border: 1.5px solid var(--color-resolved-border);
+            border-radius: 12px;
+            color: var(--text-primary);
+            font-size: 0.91rem;
+            font-weight: 600;
+            margin-top: 18px;
+            animation: slideIn 0.3s ease;
+        }
+        @keyframes slideIn {
+            from { opacity: 0; transform: translateX(-12px); }
+            to { opacity: 1; transform: translateX(0); }
+        }
+        .track-success-notice i {
+            font-size: 1.4rem;
+            flex-shrink: 0;
+            color: var(--color-resolved);
+        }
+        .track-footage-history {
+            margin-top: 24px;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+        .track-footage-history .footage-note {
+            padding: 16px 18px;
+            background: var(--bg-tertiary);
+            border: 1.5px solid var(--border-color);
+            border-left: 5px solid var(--color-primary);
+            border-radius: 12px;
+            font-size: 0.86rem;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+            transition: all 0.25s ease;
+        }
+        .track-footage-history .footage-note:hover {
+            box-shadow: 0 4px 16px rgba(37, 99, 235, 0.12);
+            transform: translateX(4px);
+            border-left-color: #1d4ed8;
+        }
+        .track-footage-history .footage-note-text {
+            color: var(--text-primary);
+            margin-bottom: 10px;
+            white-space: pre-wrap;
+            word-break: break-word;
+            line-height: 1.6;
+            font-weight: 500;
+        }
+        .track-footage-history .footage-note-meta {
+            font-size: 0.76rem;
+            color: var(--text-muted);
+            font-weight: 500;
+        }
+        /* Result container */
+
+        /* Result container */
+        .track-result {
+            animation: fadeIn 0.35s ease;
+            margin-top: 18px;
+        }
+        .track-result-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: 14px;
+            overflow: hidden;
+            box-shadow: 0 4px 16px rgba(0,0,0,0.06);
+        }
+
+        /* Header row: ticket ID + status badge */
+        .track-result-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 18px 22px;
+    background: linear-gradient(135deg, var(--bg-tertiary), var(--bg-secondary));
+    border-bottom: 1px solid var(--border-color);
+    gap: 16px;
+    flex-wrap: nowrap;
+}
+
+.track-ticket-id {
+    font-size: 1rem;
+    font-weight: 700;
+    color: var(--text-primary);
+    white-space: nowrap;
+    flex-shrink: 0;
+}
+
+.track-header-actions {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 12px;
+    flex-wrap: nowrap;
+    flex-shrink: 0;
+}
+
+#trackRequestFootageBtn {
+    white-space: nowrap;
+    flex-shrink: 0;
+}
+        .btn-icon-sm {
+            width: 40px;
+            height: 40px;
+            padding: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: var(--color-primary-bg);
+            color: var(--color-primary);
+            border: 1.5px solid var(--color-primary);
+            border-radius: 10px;
+            cursor: pointer;
+            font-size: 0.95rem;
+            transition: all 0.2s ease;
+            box-shadow: 0 2px 8px rgba(37, 99, 235, 0.12);
+        }
+        .btn-icon-sm:hover {
+            background: var(--color-primary);
+            color: white;
+            box-shadow: 0 4px 16px rgba(37, 99, 235, 0.25);
+            transform: translateY(-2px);
+        }
+        .btn-icon-sm:active {
+            transform: translateY(0);
+        }
+        .track-status-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 6px 18px;
+            border-radius: 20px;
+            font-size: 0.82rem;
+            font-weight: 600;
+            white-space: nowrap;
+            flex-shrink: 0;
+        }
+        .track-status-badge::before {
+            content: '';
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+        }
+        .track-status-badge.pending {
+            background: var(--color-pending-bg);
+            color: var(--color-pending);
+            border: 1px solid var(--color-pending-border);
+        }
+        .track-status-badge.pending::before { background: var(--color-pending); }
+        .track-status-badge.in-progress {
+            background: var(--color-progress-bg);
+            color: var(--color-progress);
+            border: 1px solid var(--color-progress-border);
+        }
+        .track-status-badge.in-progress::before { background: var(--color-progress); }
+        .track-status-badge.resolved {
+            background: var(--color-resolved-bg);
+            color: var(--color-resolved);
+            border: 1px solid var(--color-resolved-border);
+        }
+        .track-status-badge.resolved::before { background: var(--color-resolved); }
+        .track-status-badge.pending-approval {
+            background: var(--color-warning-bg);
+            color: var(--color-warning);
+            border: 1px solid var(--color-warning-border);
+        }
+        .track-status-badge.pending-approval::before { background: var(--color-warning); }
+        .track-status-badge.for-revision {
+            background: var(--color-danger-bg);
+            color: var(--color-danger);
+            border: 1px solid var(--color-offline-border);
+        }
+        .track-status-badge.for-revision::before { background: var(--color-danger); }
+        .track-status-badge.insufficient-footage {
+            background: var(--color-insufficient-bg);
+            color: var(--color-insufficient);
+            border: 1px solid var(--color-insufficient-border);
+        }
+        .track-status-badge.insufficient-footage::before { background: var(--color-insufficient); }
+
+        /* Result body grid */
+        .track-result-body {
+            padding: 18px 22px;
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 14px;
+        }
+        .track-field {
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
+        }
+        .track-field-full {
+            grid-column: span 2;
+        }
+        .track-field label {
+            font-size: 0.68rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            color: var(--text-muted);
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+        .track-field label i {
+            font-size: 0.7rem;
+            color: var(--color-primary);
+        }
+        .track-field span {
+            font-size: 0.9rem;
+            color: var(--text-primary);
+            background: var(--bg-tertiary);
+            padding: 10px 14px;
+            border-radius: 8px;
+            border: 1px solid var(--border-color);
+            word-break: break-word;
+            line-height: 1.45;
+            transition: background 0.15s ease;
+        }
+        .track-field span:hover {
+            background: var(--bg-hover);
+        }
+
+
+/* Compact grid of small attachment tiles (thumbnails, not full players) */
+        .attachments-inline {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(92px, 1fr));
+            gap: 10px;
+            width: 100%;
+            padding: 4px 0;
+        }
+        /* One tile per attachment: square thumbnail + caption */
+        .track-attachment-tile {
+            position: relative;
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
+            min-width: 0;
+            color: var(--text-primary);
+            text-decoration: none;
+            cursor: pointer;
+        }
+        .track-attachment-thumb {
+            position: relative;
+            display: block;
+            width: 100%;
+            aspect-ratio: 1 / 1;
+            border-radius: 10px;
+            border: 1px solid var(--border-color);
+            background: var(--bg-card);
+            overflow: hidden;
+            transition: border-color 0.2s ease, box-shadow 0.2s ease, transform 0.2s ease;
+        }
+        .track-attachment-thumb .track-attachment-thumb-img {
+            position: absolute;
+            inset: 0;
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            display: block;
+            z-index: 1;
+            transition: transform 0.25s ease;
+        }
+        /* File-type glyph used when there is no thumbnail (PDF, Office, ZIP...) */
+        .track-attachment-icon {
+            position: absolute;
+            inset: 0;
+            z-index: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.6rem;
+            background: var(--bg-tertiary);
+        }
+        /* A poster frame that fails to load reveals the glyph underneath */
+        .track-attachment-tile.thumb-missing .track-attachment-thumb img { display: none; }
+        /* Play badge sitting over a video poster frame (the <i> is the badge) */
+        .track-attachment-play {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 30px;
+            height: 30px;
+            padding-left: 3px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 50%;
+            background: rgba(15, 23, 42, 0.62);
+            color: #fff;
+            font-size: 0.78rem;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.35);
+            pointer-events: none;
+            z-index: 2;
+            transition: background 0.2s ease, transform 0.2s ease;
+        }
+        .track-attachment-tile:hover .track-attachment-thumb {
+            border-color: var(--color-primary);
+            box-shadow: 0 4px 14px rgba(37, 99, 235, 0.22);
+            transform: translateY(-2px);
+        }
+        .track-attachment-tile:hover .track-attachment-thumb .track-attachment-thumb-img { transform: scale(1.06); }
+        .track-attachment-tile:hover .track-attachment-play {
+            background: rgba(37, 99, 235, 0.9);
+            transform: translate(-50%, -50%) scale(1.08);
+        }
+        .track-attachment-label {
+            font-size: 0.68rem;
+            font-weight: 600;
+            color: var(--text-secondary);
+            text-align: center;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        /* Field box that holds the operator's report tiles (matches .track-field span) */
+        .track-attachment-box {
+            display: block;
+            padding: 6px 10px;
+            font-size: 0.9rem;
+            color: var(--text-primary);
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            line-height: 1.45;
+            word-break: break-word;
+        }
+        /* ===== Full-screen attachment lightbox (click a tile -> media fills the screen) =====
+           Standalone overlay: it never reuses .modal-overlay / .modal-container, so opening a
+           tile dims the whole screen behind one piece of media instead of stacking a second
+           modal card on top of the Ticket Details modal. Only floating controls are shown. */
+        .track-viewer-overlay {
+            display: none;
+            position: fixed;
+            inset: 0;
+            z-index: 1500;
+            background: rgba(8, 12, 20, 0.94);
+            backdrop-filter: blur(6px);
+            align-items: center;
+            justify-content: center;
+            padding: 64px 20px 76px;
+            overflow: hidden;
+            animation: fadeInOverlay 0.2s ease;
+        }
+        .track-viewer-overlay.active { display: flex; }
+        .track-viewer-body {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            max-width: 100%;
+            max-height: 100%;
+        }
+        .track-viewer-media {
+            display: block;
+            max-width: min(1100px, 92vw);
+            max-height: calc(100vh - 150px);
+            background: #000;
+            border-radius: 12px;
+            box-shadow: 0 24px 60px rgba(0, 0, 0, 0.6);
+            object-fit: contain;
+            animation: trackViewerPop 0.22s ease;
+        }
+        @keyframes trackViewerPop {
+            from { opacity: 0; transform: scale(0.97); }
+            to { opacity: 1; transform: scale(1); }
+        }
+        /* Floating controls: a round close button and a caption pill (no header bar). */
+        .track-viewer-close {
+            position: absolute;
+            top: 18px;
+            right: 20px;
+            width: 42px;
+            height: 42px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.05rem;
+            color: #f8fafc;
+            background: rgba(255, 255, 255, 0.1);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            border-radius: 50%;
+            cursor: pointer;
+            transition: background 0.2s ease, transform 0.2s ease;
+        }
+        .track-viewer-close:hover {
+            background: rgba(255, 255, 255, 0.24);
+            transform: rotate(90deg);
+        }
+        .track-viewer-caption {
+            position: absolute;
+            left: 50%;
+            bottom: 20px;
+            transform: translateX(-50%);
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            max-width: 90vw;
+            padding: 8px 16px;
+            font-size: 0.86rem;
+            color: #e2e8f0;
+            background: rgba(255, 255, 255, 0.08);
+            border: 1px solid rgba(255, 255, 255, 0.14);
+            border-radius: 999px;
+        }
+        .track-viewer-caption i { color: #cbd5e1; }
+        .track-viewer-caption span {
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+        .track-viewer-empty {
+            color: #cbd5e1;
+            font-size: 0.92rem;
+            text-align: center;
+            padding: 36px 16px;
+        }
+        .track-viewer-empty i {
+            font-size: 2rem;
+            opacity: 0.6;
+            display: block;
+            margin-bottom: 10px;
+        }
+        @media (max-width: 640px) {
+            .track-viewer-overlay { padding: 56px 12px 68px; }
+            .track-viewer-media { max-height: calc(100vh - 140px); border-radius: 8px; }
+            .track-viewer-close { top: 12px; right: 12px; width: 38px; height: 38px; }
+            .track-viewer-caption { bottom: 14px; font-size: 0.78rem; }
+        }
+
+        /* ===== Resolved Additional Footage Section ===== */
+        #trackResolvedFootageSection {
+            border-top: 2px solid var(--color-resolved-border);
+            padding-top: 16px;
+            margin-top: 8px;
+        }
+        .track-resolved-footage-header {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            margin-bottom: 14px;
+            flex-wrap: wrap;
+        }
+        .track-resolved-footage-header label {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 0.78rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            color: var(--color-resolved);
+            margin: 0;
+            white-space: nowrap;
+        }
+        .track-resolved-footage-request {
+            font-size: 0.76rem;
+            color: var(--text-muted);
+            font-style: italic;
+            flex: 1;
+            text-align: right;
+        }
+
+        /* ===== Approved Report collapsible dropdown ===== */
+        .track-report-collapse {
+            grid-column: 1 / -1;
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-left: 4px solid var(--color-primary);
+            border-radius: 12px;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+            overflow: hidden;
+        }
+        .track-report-collapse > summary {
+            list-style: none;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            flex-wrap: wrap;
+            padding: 14px 16px;
+            user-select: none;
+            background: linear-gradient(135deg, var(--bg-tertiary), var(--bg-secondary));
+            transition: background 0.2s ease;
+        }
+        .track-report-collapse > summary::-webkit-details-marker { display: none; }
+        .track-report-collapse > summary:hover { background: var(--bg-hover); }
+        .track-report-collapse-title {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 0.8rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            color: var(--text-primary);
+        }
+        .track-report-collapse-title i { color: var(--color-primary); }
+        .track-report-collapse-hint {
+            font-size: 0.72rem;
+            font-weight: 600;
+            color: var(--text-muted);
+            text-transform: none;
+            letter-spacing: 0;
+        }
+        .track-report-collapse-caret {
+            margin-left: auto;
+            color: var(--text-muted);
+            transition: transform 0.25s ease;
+        }
+        .track-report-collapse[open] > summary {
+            border-bottom: 1px solid var(--border-color);
+        }
+        .track-report-collapse[open] .track-report-collapse-caret { transform: rotate(180deg); }
+        .track-report-collapse-body {
+            padding: 16px;
+            display: flex;
+            flex-direction: column;
+            gap: 14px;
+        }
+        .track-report-collapse-body .track-field-full {
+            grid-column: auto;
+        }
+
+        /* Not found / error state */
+        .track-not-found {
+            text-align: center;
+            padding: 36px 20px 28px;
+            margin-top: 10px;
+        }
+        .track-not-found i {
+            font-size: 2.4rem;
+            display: block;
+            margin-bottom: 14px;
+            color: var(--color-danger);
+            opacity: 0.6;
+        }
+        .track-not-found p {
+            font-size: 0.92rem;
+            color: var(--text-secondary);
+            line-height: 1.5;
+            max-width: 320px;
+            margin: 0 auto;
+        }
+
+        /* ===== 2-Day Tracking Access: expired window ===== */
+        .track-access-expired {
+            background: var(--color-danger-bg);
+            border: 1px solid var(--color-danger-border, var(--color-danger));
+            border-radius: 10px;
+            margin-top: 14px;
+        }
+        .track-access-expired i { color: var(--color-danger); opacity: 0.9; }
+        .track-access-expired p { color: var(--color-danger); font-weight: 600; }
+
+        /* Countdown hint shown next to the Approved Report header */
+        .track-access-until {
+            font-size: 0.72rem;
+            font-weight: 700;
+            color: var(--color-primary);
+            text-transform: none;
+            letter-spacing: 0;
+            margin-left: 4px;
+        }
+
+        /* ===== Re-access request form (inside the expired notice) ===== */
+        .track-reopen-form {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            text-align: left;
+            margin-top: 16px;
+            padding: 16px;
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-left: 4px solid var(--color-warning);
+            border-radius: 10px;
+        }
+        .track-reopen-form label {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 0.8rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            color: var(--text-primary);
+            margin: 0;
+        }
+        .track-reopen-form label i { color: var(--color-warning); }
+        .track-reopen-form textarea.track-input {
+            min-height: 84px;
+            max-height: 220px;
+            resize: vertical;
+            line-height: 1.55;
+            color: var(--text-primary);
+            background: var(--bg-input);
+        }
+        .track-reopen-form .track-footage-actions { margin-top: 0; justify-content: flex-end; }
+        .track-reopen-form .track-validation-error,
+        .track-reopen-form .track-success-notice { margin-top: 0; }
+        .track-reopen-form .track-footage-history { margin-top: 0; }
+        .track-reopen-status {
+            font-size: 0.72rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.4px;
+        }
+        /* Inside the form the icons are inline glyphs — they must not inherit
+           the big, centred, half-transparent treatment the lock icon gets from
+           `.track-not-found i` / `.track-access-expired i`. */
+        .track-reopen-form i {
+            display: inline-block;
+            margin-bottom: 0;
+            font-size: inherit;
+            opacity: 1;
+            color: var(--color-warning);
+        }
+        .track-reopen-form .track-footage-actions i { margin-right: 7px; }
+        .track-reopen-form .track-validation-error i { font-size: 1.2rem; color: var(--color-danger); }
+        .track-reopen-form .track-success-notice i { font-size: 1.3rem; color: var(--color-resolved); }
+
+        /* Loading spinner */
+        .track-loading {
+            text-align: center;
+            padding: 28px 20px;
+            color: var(--text-muted);
+            font-size: 0.92rem;
+            font-weight: 500;
+        }
+        .track-loading i {
+            margin-right: 10px;
+            font-size: 1.1rem;
+        }
+
+/* Responsive */
+        /* 640px (not 520px): two side-by-side inputs with long placeholders
+           ("Phone or email used") start to crowd each other well before the
+           520px mark — a landscape phone or a small tablet got a squeezed,
+           half-off-screen pair. 640px is the widest breakpoint the rest of the
+           app already uses, so this also makes the two agree. */
+        @media (max-width: 640px) {
+            .track-input-row {
+                flex-direction: column;
+                gap: 0;
+            }
+            .track-result-body {
+                grid-template-columns: 1fr;
+                gap: 12px;
+                padding: 14px 16px;
+            }
+            .track-field-full {
+                grid-column: span 1;
+            }
+            .track-result-header {
+                padding: 14px 16px;
+                flex-direction: row;
+                align-items: center;
+            }
+            .track-ticket-id {
+                font-size: 0.95rem;
+            }
+        }
+        /* Animated shimmer for loading */
+        @keyframes shimmer {
+            0% { background-position: -200% 0; }
+            100% { background-position: 200% 0; }
+        }
+
+        /* ---- SUCCESS MODAL (Ticket Submitted) ---- */
+        .success-modal {
+            max-width: 460px;
+        }
+        .success-modal-body {
+            text-align: center;
+            padding: 28px 26px;
+        }
+        .success-icon {
+            width: 72px;
+            height: 72px;
+            margin: 0 auto 16px;
+            border-radius: 50%;
+            background: var(--color-resolved-bg);
+            border: 2px solid var(--color-resolved-border);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 2rem;
+            color: var(--color-resolved);
+        }
+        .success-message {
+            font-size: 0.92rem;
+            color: var(--text-secondary);
+            line-height: 1.5;
+            margin-bottom: 20px;
+            max-width: 360px;
+            margin-left: auto;
+            margin-right: auto;
+        }
+        .ticket-number-wrap {
+            text-align: left;
+            margin-bottom: 12px;
+        }
+        .ticket-number-wrap label {
+            display: block;
+            font-size: 0.72rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            color: var(--text-muted);
+            margin-bottom: 7px;
+        }
+        .ticket-number-box {
+            display: flex;
+            align-items: stretch;
+            gap: 8px;
+        }
+        .ticket-number-text {
+            flex: 1;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 14px 16px;
+            background: var(--bg-tertiary);
+            border: 1.5px dashed var(--border-light);
+            border-radius: 10px;
+            font-family: 'SF Mono', 'Fira Code', 'Inter', monospace;
+            font-size: 1.15rem;
+            font-weight: 700;
+            color: var(--color-primary);
+            letter-spacing: 0.5px;
+            word-break: break-all;
+            text-align: center;
+        }
+        .copy-btn {
+            padding: 10px 18px;
+            border-radius: 10px;
+            flex-shrink: 0;
+            white-space: nowrap;
+        }
+        .copy-btn.copied {
+            background: var(--color-resolved);
+        }
+        .copy-status {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+            font-size: 0.82rem;
+            font-weight: 600;
+            color: var(--color-resolved);
+            margin-bottom: 14px;
+        }
+        .caution-box {
+            display: flex;
+            align-items: flex-start;
+            gap: 12px;
+            text-align: left;
+            padding: 14px 16px;
+            /* Theme-aware: --color-warning-bg/-border are redefined in dark mode
+               (style.css), so this box follows the theme instead of staying a
+               pale-yellow card that light text cannot be read on. */
+            background: var(--color-warning-bg);
+            border: 1px solid var(--color-warning-border);
+            border-left: 4px solid var(--color-warning);
+            border-radius: 10px;
+            margin-bottom: 20px;
+        }
+        .caution-icon {
+            flex-shrink: 0;
+            font-size: 1.3rem;
+            color: var(--color-warning);
+            margin-top: 2px;
+        }
+        .caution-text strong {
+            display: block;
+            font-size: 0.88rem;
+            /* The heading sits on the tinted background, so it must take the
+               page's readable text colour — NOT the warning hue, which is too
+               faint against the tint once the theme flips. */
+            color: var(--text-primary);
+            margin-bottom: 4px;
+        }
+        .caution-text p {
+            font-size: 0.82rem;
+            color: var(--text-secondary);
+            line-height: 1.5;
+            margin: 0;
+        }
+        .caution-highlight {
+            font-weight: 700;
+            color: var(--text-primary);
+            text-decoration: underline;
+        }
+        .caution-text em {
+            font-style: italic;
+            color: var(--color-primary);
+        }
+        .success-actions {
+            display: flex;
+            justify-content: center;
+        }
+        .success-actions .btn {
+            padding: 12px 40px;
+            border-radius: 10px;
+            justify-content: center;
+            background: linear-gradient(135deg, var(--color-primary), #4f46e5);
+        }
+
+        /* Mobile responsive: stack copy button below ticket number */
+        @media (max-width: 480px) {
+            .success-modal-body {
+                padding: 24px 20px;
+            }
+            .ticket-number-box {
+                flex-direction: column;
+            }
+            .copy-btn {
+                width: 100%;
+                justify-content: center;
+                padding: 12px;
+            }
+            .ticket-number-text {
+                padding: 16px;
+            }
+            .success-actions .btn {
+                width: 100%;
+            }
+        }
+/* Mobile responsive: make the whole submit page fit phones */
+        @media (max-width: 560px) {
+            body { padding: 20px 14px; }
+            .ticket-form-logo {
+                flex-direction: column !important;
+                align-items: flex-start !important;
+                gap: 14px !important;
+            }
+            .ticket-form-logo > div:first-child {
+                width: 100%;
+                justify-content: flex-start;
+            }
+            .form-actions {
+                flex-direction: column;
+                gap: 10px;
+            }
+            .form-actions .btn {
+                width: 100%;
+                justify-content: center;
+            }
+        }
+    </style>
+</head>
+<body>
+    <!-- Theme toggle (fixed top-right; no app header on this public page) -->
+    <button type="button" class="icon-btn floating-theme-toggle" data-theme-toggle aria-label="Switch to dark mode" title="Switch to dark mode">
+        <i class="fas fa-moon"></i>
+    </button>
+    <div style="width:100%;max-width:680px;">
+        <div class="form-card">
+            <div class="ticket-form-logo" style="display:flex;align-items:center;justify-content:space-between;gap:16px;">
+                <div style="display:flex;align-items:center;gap:16px;">
+                    <!-- Brand tile is the opaque full-color logo.png — it reads fine on the
+                         dark card as-is, so no dark-mode invert filter is applied. -->
+                    <img src="logo.png" alt="Jiangnan CCTV Logo" class="login-logo">
+                    <div class="form-title">
+                        <h2>Track Your Ticket</h2>
+                        <p>Check the status of a ticket you have already submitted</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ================================================================
+                 THIS PAGE IS NOW A STATUS PORTAL ONLY.
+
+                 The submission form used to live here. It has MOVED to the Area
+                 Manager dashboard (js/owner-ticket-form.js), where the Area
+                 Manager raises tickets for their own branches from inside the
+                 app. The "Track Ticket Status" button that used to sit in this
+                 header is gone as well.
+
+                 ⚠️ BOTH THE MODAL BELOW AND THIS FILE ITSELF MUST STAY, AND THE
+                 REASON IS NOT COSMETIC:
+
+                   1. js/email.js builds approval links to submit-ticket.html, and
+                      every email ALREADY SENT to a requester contains one.
+                      Renaming or deleting this page breaks every live link.
+                   2. The Track modal below is LOGIN-FREE on purpose. A requester
+                      checking on a ticket is not an employee and has no account;
+                      routing them through the dashboard would lock them out of
+                      their own ticket.
+                   3. The deep link `?track=<ticket>` is now the ONLY way this
+                      modal opens, and it is exactly what those emails point at.
+
+                 So the Track modal, the attachment lightbox and the `?track=`
+                 handling below are load-bearing and were left untouched. Only the
+                 form, its uploader and the success modal it needed were removed. -->
+            <div style="text-align:center;padding:10px 4px 6px;">
+                <i class="fas fa-envelope-open-text" style="font-size:2rem;color:var(--color-primary);"></i>
+                <p style="margin:14px 0 6px;color:var(--text-secondary);line-height:1.6;">
+                    Open the link in your approval email to bring up your ticket,
+                    then enter your ticket number together with the email or
+                    phone number you used when you filed it.
+                </p>
+            </div>
+        </div>
+    </div>
+
+<!-- Track Ticket Status Modal -->
+    <div class="modal-overlay" id="trackModal">
+        <div class="modal-container">
+            <div class="modal-header">
+
+<h2><i class="fas fa-search"></i> Track Ticket Status</h2>
+                <button type="button" class="modal-close" id="closeTrackModal">&times;</button>
+            </div>
+<div class="modal-body">
+                <div class="track-input-row">
+                    <div class="track-form-group">
+                        <label for="trackTicketInput"><i class="fas fa-ticket-alt"></i> Ticket Number</label>
+                        <input type="text" id="trackTicketInput" class="track-input" placeholder="e.g. bnw-tix001" autocomplete="off">
+                    </div>
+                    <div class="track-form-group">
+                        <label for="trackContactInput"><i class="fas fa-envelope"></i> Contact/Email</label>
+                        <input type="text" id="trackContactInput" class="track-input" placeholder="Phone or email used" autocomplete="off">
+                    </div>
+                </div>
+                <div class="track-search-row">
+                    <button type="button" class="btn btn-primary" id="trackLookupBtn"><i class="fas fa-shield-alt"></i> Lookup Status</button>
+                </div>
+                <div id="trackValidationError" class="track-validation-error" style="display:none;">
+                    <i class="fas fa-exclamation-triangle"></i>
+                    <span id="trackValidationMsg">Please fill in both fields.</span>
+                </div>
+                <div id="trackResult" class="track-result" style="display:none;">
+                    <div class="track-result-card">
+                        <div class="track-result-header">
+                            <span class="track-ticket-id" id="trackDisplayId"></span>
+                            <div class="track-header-actions">
+<button type="button" class="btn btn-icon-text" id="trackRequestFootageBtn"><i class="fas fa-video"></i> <span>Request Additional</span></button>
+                            </div>
+                        </div>
+                        <div class="track-result-body" id="trackResultBody">
+                            <div class="track-field">
+                                <label>Branch</label>
+                                <span id="trackDisplayBranch"></span>
+                            </div>
+<div class="track-field">
+                                <label>Incident Type</label>
+                                <span id="trackDisplayIncident"></span>
+                            </div>
+                            <div class="track-field track-field-full">
+                                <label>Description</label>
+                                <span id="trackDisplayDescription"></span>
+                            </div>
+                            <!-- ===== Approved Report (collapsible dropdown) ===== -->
+                            <details class="track-report-collapse" id="trackReportCollapse">
+                                <summary>
+                                    <span class="track-report-collapse-title"><i class="fas fa-file-alt"></i> Approved Report</span>
+                                    <span class="track-report-collapse-hint">Resolution &amp; operator's report</span>
+                                    <span class="track-access-until" id="trackAccessUntil" style="display:none;"></span>
+                                    <i class="fas fa-chevron-down track-report-collapse-caret"></i>
+                                </summary>
+                                <div class="track-report-collapse-body">
+                                    <div class="track-field track-field-full">
+                                        <label><i class="fas fa-check-circle"></i> Resolution Notes</label>
+                                        <span id="trackDisplayResolution" style="white-space:pre-line;"></span>
+                                    </div>
+                                    <div class="track-field track-field-full" id="trackRejectionWrap" style="display:none;">
+                                        <label><i class="fas fa-exclamation-circle"></i> Rejection Reason</label>
+                                        <span id="trackDisplayRejection" style="border-color:var(--color-danger);background:var(--color-danger-bg);color:var(--color-danger);"></span>
+                                    </div>
+                                    <div class="track-field track-field-full">
+                                        <label><i class="fas fa-paperclip"></i> Operator's Report</label>
+                                        <div id="trackDisplayAttachments" class="track-attachment-box"></div>
+                                    </div>
+                                    <!-- ===== Resolved Additional Footage Section ===== -->
+                                    <div class="track-field track-field-full" id="trackResolvedFootageSection" style="display:none;">
+                                        <div class="track-resolved-footage-header">
+                                            <label><i class="fas fa-check-circle"></i> Resolved Additional Footage</label>
+                                            <span class="track-resolved-footage-request" id="trackResolvedFootageRequestText"></span>
+                                        </div>
+                                        <div class="track-resolved-footage-grid" id="trackResolvedFootageGrid"></div>
+                                    </div>
+                                </div>
+                            </details>
+                            <div class="track-field track-field-full" id="trackFootageSection" style="display:none;">
+                                <div id="trackFootageBox">
+                                    <label for="trackFootageDetails"><i class="fas fa-info-circle"></i> What footage do you need?</label>
+                                    <textarea id="trackFootageDetails" class="track-input" rows="4"
+                                        placeholder="Describe the specific footage required (e.g., camera angle, time range, location, incident description, etc.)..."></textarea>
+                                    <div class="track-footage-actions">
+                                        <button type="button" class="btn btn-secondary btn-sm" id="trackCancelFootage"><i class="fas fa-times"></i> Cancel</button>
+                                        <button type="button" class="btn btn-primary btn-sm" id="trackSubmitFootage"><i class="fas fa-paper-plane"></i> Send Request</button>
+                                    </div>
+                                </div>
+                                <div id="trackFootageError" class="track-validation-error" style="display:none;">
+                                    <i class="fas fa-exclamation-circle"></i>
+                                    <span id="trackFootageMsg">Please describe what footage is needed.</span>
+                                </div>
+                                <div id="trackFootageSuccess" class="track-success-notice" style="display:none;">
+                                    <i class="fas fa-check-circle"></i>
+                                    <span id="trackFootageSuccessMsg">Your footage request has been sent to the operator.</span>
+                                </div>
+                                <div id="trackFootageRequests" class="track-footage-history"></div>
+                            </div>
+
+                        </div>
+                    </div>
+                </div>
+                <!-- ===== 2-Day Tracking Access: expired window (report/footage hidden) =====
+                     Sits directly under the result card: both are mutually exclusive states
+                     of the lookup (active window vs. expired window). -->
+                <div id="trackExpired" class="track-not-found track-access-expired" style="display:none;">
+                    <i class="fas fa-lock"></i>
+                    <p id="trackExpiredMsg">Viewing access for this ticket has expired. Report details and footage are no longer available.</p>
+                    <!-- ===== Re-access request: ask the Superadmin to reopen viewing ===== -->
+                    <div class="track-reopen-form" id="trackReopenForm">
+                        <label for="trackReopenReason"><i class="fas fa-key"></i> Request to open this ticket again</label>
+                        <textarea id="trackReopenReason" class="track-input" rows="3"
+                            placeholder="Why do you need access to the footage again? (e.g. Head office audit needs the cashier clip)"></textarea>
+                        <div id="trackReopenError" class="track-validation-error" style="display:none;">
+                            <i class="fas fa-exclamation-circle"></i>
+                            <span id="trackReopenMsg">Please tell us why you need access again.</span>
+                        </div>
+                        <div class="track-footage-actions">
+                            <button type="button" class="btn btn-primary btn-sm" id="trackReopenSubmit"><i class="fas fa-paper-plane"></i> Request Access Again</button>
+                        </div>
+                        <div id="trackReopenSuccess" class="track-success-notice" style="display:none;">
+                            <i class="fas fa-check-circle"></i>
+                            <span id="trackReopenSuccessMsg">Your re-access request has been sent. We will email you once access is approved.</span>
+                        </div>
+                        <div id="trackReopenHistory" class="track-footage-history"></div>
+                    </div>
+                </div>
+                <div id="trackNotFound" class="track-not-found" style="display:none;">
+                    <i class="fas fa-exclamation-circle"></i>
+                    <p id="trackNotFoundMsg">Ticket number and contact/email combination do not match. Please verify your credentials.</p>
+                </div>
+<div id="trackPendingApproval" class="track-not-found" style="display:none;">
+                    <i class="fas fa-hourglass-half" style="color:var(--color-warning);"></i>
+                    <p>Your ticket is still being processed. Ticket details and the resolution will be shown here once it has been reviewed and approved.</p>
+                </div>
+                <div class="track-loading" id="trackLoading" style="display:none;">
+                    <i class="fas fa-spinner fa-spin"></i> Verifying credentials...
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Attachment lightbox (start): a standalone full-screen overlay, never a modal inside the modal -->
+    <div class="track-viewer-overlay" id="trackAttachmentViewer" role="dialog" aria-modal="true" aria-label="Attachment preview">
+        <button type="button" class="track-viewer-close" id="closeTrackViewer" aria-label="Close preview"><i class="fas fa-times"></i></button>
+        <div class="track-viewer-body" id="trackViewerBody"></div>
+        <div class="track-viewer-caption">
+            <i class="fas fa-file" id="trackViewerIcon"></i>
+            <span id="trackViewerTitle">Attachment</span>
+        </div>
+    </div>
+    <!-- Attachment lightbox (end) -->
+
+
+        <!-- Refresh-state manager: keeps the user on the current page after F5 -->
+    <script src="js/refresh-state.js"></script>
+    <script src="firebase.js"></script>
+    <script>
+        (function() {
+
+            // ---- TRACK TICKET STATUS MODAL (Two-Factor Verification) ----
+            // SECURITY: Lookup REQUIRES an exact ticket-number match (document ID)
+            // plus a matching contact/email. No partial or fuzzy matching is allowed.
+            var trackModal = document.getElementById('trackModal');
+            var closeTrackBtn = document.getElementById('closeTrackModal');
+            var trackInput = document.getElementById('trackTicketInput');
+            var trackContactInput = document.getElementById('trackContactInput');
+            var trackLookupBtn = document.getElementById('trackLookupBtn');
+            var trackResult = document.getElementById('trackResult');
+            var trackNotFound = document.getElementById('trackNotFound');
+            var trackNotFoundMsg = document.getElementById('trackNotFoundMsg');
+            var trackPendingApproval = document.getElementById('trackPendingApproval');
+            var trackExpired = document.getElementById('trackExpired');
+            var trackExpiredMsg = document.getElementById('trackExpiredMsg');
+            // ===== Re-access request (shown inside the expired notice) =====
+            var trackReopenForm = document.getElementById('trackReopenForm');
+            var trackReopenReason = document.getElementById('trackReopenReason');
+            var trackReopenError = document.getElementById('trackReopenError');
+            var trackReopenMsg = document.getElementById('trackReopenMsg');
+            var trackReopenSubmit = document.getElementById('trackReopenSubmit');
+            var trackReopenSuccess = document.getElementById('trackReopenSuccess');
+            var trackReopenHistory = document.getElementById('trackReopenHistory');
+            var currentReopenTicketId = null;
+            var trackLoading = document.getElementById('trackLoading');
+            var trackValidationError = document.getElementById('trackValidationError');
+            var trackValidationMsg = document.getElementById('trackValidationMsg');
+            // Request Additional Footage state/elements
+            var trackFootageSection = document.getElementById('trackFootageSection');
+            var trackRequestFootageBtn = document.getElementById('trackRequestFootageBtn');
+            var trackFootageBox = document.getElementById('trackFootageBox');
+            var trackFootageDetails = document.getElementById('trackFootageDetails');
+            var trackSubmitFootage = document.getElementById('trackSubmitFootage');
+            var trackCancelFootage = document.getElementById('trackCancelFootage');
+            var trackFootageError = document.getElementById('trackFootageError');
+            var trackFootageMsg = document.getElementById('trackFootageMsg');
+            var trackFootageSuccess = document.getElementById('trackFootageSuccess');
+            var trackFootageRequests = document.getElementById('trackFootageRequests');
+                        var currentTrackTicketId = null;
+            var currentTrackData = null;
+
+            // ===== Deep link from the "access approved" email: ?track=BNW-TIX007 =====
+            // SECURITY: ONLY the ticket number travels in the URL. The contact/email
+            // is deliberately NEVER put in the link (it would end up in the browser
+            // history and in any screenshot the manager shares), so the visitor
+            // still has to type it — the two-factor lookup is unchanged.
+            // It only prefills the ticket box; it NEVER auto-submits.
+            var deepLinkedTicketNumber = (function () {
+                try {
+                    var raw = new URLSearchParams(window.location.search).get('track');
+                    return raw ? String(raw).trim() : '';
+                } catch (e) {
+                    return '';
+                }
+            })();
+            var deepLinkPrefillDone = false;
+
+
+            function hideValidationError() {
+                trackValidationError.style.display = 'none';
+                trackInput.classList.remove('input-error');
+                trackContactInput.classList.remove('input-error');
+            }
+
+            // ===== Re-access request helpers =====
+            // Reset the reason box / banners without touching the history list.
+            function resetReopenForm() {
+                if (trackReopenReason) trackReopenReason.value = '';
+                if (trackReopenError) trackReopenError.style.display = 'none';
+                if (trackReopenSuccess) trackReopenSuccess.style.display = 'none';
+                if (trackReopenSubmit) {
+                    trackReopenSubmit.disabled = false;
+                    trackReopenSubmit.innerHTML = '<i class="fas fa-paper-plane"></i> Request Access Again';
+                }
+            }
+
+            // Full reset (modal open / fresh lookup): clears the history too.
+            function clearReopenState() {
+                currentReopenTicketId = null;
+                resetReopenForm();
+                if (trackReopenHistory) trackReopenHistory.innerHTML = '';
+            }
+
+            function reopenShowError(message) {
+                if (trackReopenMsg) trackReopenMsg.textContent = message;
+                if (trackReopenError) trackReopenError.style.display = 'flex';
+                if (trackReopenReason) trackReopenReason.focus();
+            }
+
+            // ============================================================
+            //  RE-ACCESS REQUEST HISTORY (shown under the expired notice)
+            //  Mirrors the footage-request note list: newest first, with a
+            //  status line driven by the ticket's `accessReopenRequest`.
+            // ============================================================
+            function renderReopenRequests(data) {
+                if (!trackReopenHistory) return;
+                var notes = (data && Array.isArray(data.comments)) ? data.comments : [];
+                notes = notes.filter(function(n) { return n && n.type === 'access_reopen_request'; });
+                trackReopenHistory.innerHTML = '';
+                if (notes.length === 0) return;
+
+                var latestState = (data && data.accessReopenRequest) || null;
+                // Newest first
+                for (var i = notes.length - 1; i >= 0; i--) {
+                    var n = notes[i];
+                    var noteEl = document.createElement('div');
+                    noteEl.className = 'footage-note';
+
+                    var textEl = document.createElement('div');
+                    textEl.className = 'footage-note-text';
+                    textEl.textContent = 'Reason: ' + (n.text || '');
+                    noteEl.appendChild(textEl);
+
+                    var metaEl = document.createElement('div');
+                    metaEl.className = 'footage-note-meta';
+                    var meta = 'Requested by ' + (n.requestedBy || 'Requester');
+                    var when = formatFootageNoteTimestamp(n.requestedAt);
+                    if (when) meta += ' on ' + when;
+                    metaEl.textContent = meta;
+                    noteEl.appendChild(metaEl);
+
+                    var statusEl = document.createElement('div');
+                    statusEl.className = 'track-reopen-status';
+                    var isLatest = (i === notes.length - 1);
+                    var status = isLatest && latestState ? (latestState.status || 'pending') : 'fulfilled';
+                    if (status === 'fulfilled') {
+                        var resolvedAt = formatFootageNoteTimestamp(latestState && latestState.resolvedAt);
+                        statusEl.textContent = 'Fulfilled' + (resolvedAt ? ' — access resent on ' + resolvedAt : '');
+                        statusEl.style.color = 'var(--color-resolved)';
+                    } else {
+                        statusEl.textContent = 'Awaiting approval \u2014 we will email you';
+                        statusEl.style.color = 'var(--color-warning)';
+                    }
+                    noteEl.appendChild(statusEl);
+
+                    trackReopenHistory.appendChild(noteEl);
+                }
+            }
+
+            // ============================================================
+            //  SUBMIT RE-ACCESS REQUEST
+            //  The requester explains WHY they need the footage again. This
+            //  only files the request — the Superadmin is still the one who
+            //  restores access by pressing "Resend" (fresh window).
+            // ============================================================
+            function submitReopenRequest() {
+                if (!currentReopenTicketId) {
+                    reopenShowError('Please look up your ticket first.');
+                    return;
+                }
+                var reason = trackReopenReason ? trackReopenReason.value.trim() : '';
+                if (!reason || reason.replace(/\s+/g, '').length < 5) {
+                    reopenShowError('Please tell us why you need access again (at least 5 characters).');
+                    return;
+                }
+                if (trackReopenError) trackReopenError.style.display = 'none';
+                if (trackReopenSuccess) trackReopenSuccess.style.display = 'none';
+
+                var btn = trackReopenSubmit;
+                var originalLabel = btn ? btn.innerHTML : '';
+                if (btn) {
+                    btn.disabled = true;
+                    btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Sending...';
+                }
+
+                var data = currentTrackData || {};
+                var requestedBy = data.name || 'Requester';
+                var requestedByEmail = data.email || '';
+                var requestedByContact = data.contact || '';
+                var note = {
+                    type: 'access_reopen_request',
+                    text: reason,
+                    requestedBy: requestedBy,
+                    requestedByEmail: requestedByEmail,
+                    requestedByContact: requestedByContact,
+                    requestedAt: new Date()
+                };
+                var prevCount = (data.accessReopenRequest && Number(data.accessReopenRequest.requestCount)) || 0;
+                var reopenState = {
+                    status: 'pending',
+                    reason: reason,
+                    requestedBy: requestedBy,
+                    requestedByEmail: requestedByEmail,
+                    requestedByContact: requestedByContact,
+                    requestedAt: new Date(),
+                    requestCount: prevCount + 1
+                };
+
+                // Ask for notification permission while we still have the click's
+                // user activation (same trick as the footage-request flow).
+                try {
+                    if (('Notification' in window) && Notification.permission === 'default') {
+                        Notification.requestPermission().catch(function() {});
+                    }
+                } catch (e) { /* ignore */ }
+
+                db.collection('tickets').doc(currentReopenTicketId).update({
+                    comments: firebase.firestore.FieldValue.arrayUnion(note),
+                    accessReopenRequest: reopenState,
+                    updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+                }).then(function() {
+                    reopenRequestSubmitted(data, note, reopenState, requestedBy, reason);
+                }).catch(function(err) {
+                    console.error('Re-access request error:', err);
+                    reopenShowError('Failed to send your request. Please try again.');
+                }).finally(function() {
+                    if (btn) {
+                        btn.disabled = false;
+                        btn.innerHTML = originalLabel;
+                    }
+                });
+            }
+
+            // Success path of submitReopenRequest(): refresh local state, the
+            // history list and fire the desktop notification.
+            function reopenRequestSubmitted(data, note, reopenState, requestedBy, reason) {
+                var existingComments = Array.isArray(data.comments) ? data.comments : [];
+                currentTrackData = Object.assign({}, data, {
+                    comments: existingComments.concat([note]),
+                    accessReopenRequest: reopenState
+                });
+                resetReopenForm();
+                if (trackReopenSuccess) trackReopenSuccess.style.display = 'flex';
+                renderReopenRequests(currentTrackData);
+
+                // Desktop notification (Windows Action Center) — same tag style as
+                // the footage flow so an open dashboard replaces, not stacks.
+                try {
+                    if ('Notification' in window && Notification.permission === 'granted') {
+                        new Notification('📩 Re-access Requested — Jiangnan Command Center', {
+                            body: 'Ticket: ' + (currentTrackData.ticketNumber || currentReopenTicketId) +
+                                  '\nBranch: ' + (currentTrackData.branch || 'Unknown') +
+                                  '\nRequested by: ' + requestedBy +
+                                  '\nReason: ' + reason,
+                            icon: 'tamang logo.png',
+                            tag: 'reopen-ticket-' + currentReopenTicketId,
+                            requireInteraction: true,
+                            silent: true
+                        });
+                    }
+                } catch (e) {
+                    console.warn('[Track] Re-access request notification failed:', e);
+                }
+            }
+
+            if (trackReopenSubmit) trackReopenSubmit.addEventListener('click', submitReopenRequest);
+            if (trackReopenReason) {
+                // Ctrl/Cmd + Enter sends the request; plain Enter keeps the newline.
+                trackReopenReason.addEventListener('keydown', function(e) {
+                    if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+                        e.preventDefault();
+                        submitReopenRequest();
+                    }
+                });
+            }
+
+            function openTrackModal() {
+                trackModal.classList.add('active');
+                trackInput.value = '';
+                trackContactInput.value = '';
+                trackResult.style.display = 'none';
+                trackNotFound.style.display = 'none';
+                trackPendingApproval.style.display = 'none';
+                if (trackExpired) trackExpired.style.display = 'none';
+                trackLoading.style.display = 'none';
+                hideValidationError();
+                // Reset the re-access request form + history
+                clearReopenState();
+                // Reset the Request Additional Footage UI
+                currentTrackTicketId = null;
+                currentTrackData = null;
+                closeTrackAttachmentViewer();
+                // Reset the Approved Report dropdown to its collapsed state
+                var reportCollapse = document.getElementById('trackReportCollapse');
+                if (reportCollapse) reportCollapse.open = false;
+                if (trackFootageBox) trackFootageBox.style.display = 'none';
+                if (trackFootageDetails) trackFootageDetails.value = '';
+                if (trackFootageError) trackFootageError.style.display = 'none';
+                if (trackFootageSuccess) trackFootageSuccess.style.display = 'none';
+                if (trackRequestFootageBtn) trackRequestFootageBtn.innerHTML = '<i class="fas fa-video"></i> <span>Request Additional</span>';
+                var rb = document.getElementById('trackResultBody');
+                if (rb) rb.style.display = '';
+                if (trackFootageSection) trackFootageSection.style.display = 'none';
+                // ===== Deep link (?track=BNW-TIX007): prefill the ticket box ONCE =====
+                // openTrackModal() clears both inputs above, so the prefill has to
+                // happen after the reset. Guarded by a flag so that a later manual
+                // open of the modal never overwrites what the visitor has typed.
+                if (deepLinkedTicketNumber && !deepLinkPrefillDone) {
+                    trackInput.value = deepLinkedTicketNumber;
+                    deepLinkPrefillDone = true;
+                    // Land the cursor in the field they still have to fill in.
+                    setTimeout(function() { trackContactInput.focus(); }, 100);
+                } else {
+                    setTimeout(function() { trackInput.focus(); }, 100);
+                }
+            }
+
+            function closeTrackModalFn() {
+                trackModal.classList.remove('active');
+                // Never leave the viewer (or a playing video) behind the modal.
+                closeTrackAttachmentViewer();
+            }
+
+            if (closeTrackBtn) closeTrackBtn.addEventListener('click', closeTrackModalFn);
+            if (trackModal) {
+                trackModal.addEventListener('click', function(e) {
+                    if (e.target === trackModal) closeTrackModalFn();
+                });
+            }
+
+            // ============================================================
+            //  RESOLUTION NOTES HELPER
+            // ============================================================
+            // Shows only the resolution notes text (nested `resolution.notes`
+            // plus legacy `resolutionNotes`). No resolved-by/at info, no images.
+            function renderResolutionNotes(data) {
+                var resolutionEl = document.getElementById("trackDisplayResolution");
+                if (!resolutionEl) return;
+                var resolution = data.resolution || {};
+                var resNotes = resolution.notes || data.resolutionNotes || "";
+                resolutionEl.textContent = resNotes || '\u2014';
+            }
+
+
+            // ============================================================
+            //  TRACK TICKET ATTACHMENT HELPER (OPERATOR'S REPORT ONLY)
+            //  Hides the requester's own uploads so the Attachments field
+            //  shows only the operator's report files:
+            //   - operator files (new model): `resolution.operatorFootage`
+            //   - legacy footage-request flow: `resolvedAdditionalFootage`
+            //   - otherwise: `attachments`/`resolution.attachments` minus
+            //     the requester's `requesterAttachments`
+            // ============================================================
+            function getTrackOperatorAttachments(data) {
+                var resolution = data.resolution || {};
+                var merged = [];
+                if (Array.isArray(resolution.attachments)) merged = resolution.attachments.slice();
+                if (merged.length === 0 && Array.isArray(data.attachments)) merged = data.attachments.slice();
+                if (merged.length === 0 && data.resolutionAttachmentUrl) {
+                    merged = [{
+                        secure_url: data.resolutionAttachmentUrl,
+                        name: 'Resolution attachment',
+                        resource_type: 'raw',
+                        format: ''
+                    }];
+                }
+                var footage = Array.isArray(resolution.operatorFootage) ? resolution.operatorFootage.slice() : [];
+                if (footage.length === 0 && Array.isArray(data.resolvedAdditionalFootage)) {
+                    footage = data.resolvedAdditionalFootage.slice();
+                }
+                var requester = Array.isArray(data.requesterAttachments) ? data.requesterAttachments : null;
+                var keyOf = function(a) { return (a && (a.public_id || a.secure_url)) || ''; };
+                var keySet = function(list) { return new Set((list || []).map(keyOf).filter(Boolean)); };
+                // Operator explicitly attached report files — use only those.
+                if (footage.length > 0) {
+                    return footage.slice();
+                }
+                // ⚠️ THE REQUESTER'S LIST IS AUTHORITATIVE, and is checked FIRST.
+                // This used to prefer `footage` and derive the operator's files by
+                // subtraction ("everything not in the footage list"), so any clip
+                // missing from a truncated footage array was silently re-attributed
+                // to the requester. `requesterAttachments` is written once at ticket
+                // creation from the manager's own upload array, so it is an exact
+                // record — using it directly repairs those tickets for free.
+                if (requester && requester.length > 0) {
+                    var reqKeys = keySet(requester);
+                    return merged.filter(function(a) { return !reqKeys.has(keyOf(a)); });
+                }
+                return merged;
+            }
+
+            // ============================================================
+            //  COMPACT ATTACHMENT TILES (small thumbnails, no full players)
+            //  Every file is shown as a small square tile:
+            //   - pictures    -> the image itself (a Cloudinary c_fill thumb)
+            //   - clips       -> a Cloudinary poster frame (a still taken from
+            //                    the video, a few KB) + a play badge
+            //   - other files -> their file-type glyph
+            //  Clicking a picture/clip opens the in-app viewer below; every
+            //  other type keeps the browser's own "open in a new tab".
+            // ============================================================
+
+            /**
+             * Cloudinary delivery URL for a small square thumbnail.
+             * Clips are requested as a still image (`.jpg`) so the tile costs a
+             * few KB instead of downloading the whole video.
+             * @param {string} secureUrl the file's secure_url
+             * @param {number} width  target width
+             * @param {number} height target height
+             * @returns {string} thumbnail URL ('' when there is no usable url)
+             */
+            function trackThumbUrl(secureUrl, width, height) {
+                var url = String(secureUrl || '');
+                if (!url) return '';
+                var w = width || 240;
+                var h = height || 240;
+                var videoMarker = '/video/upload/';
+                var videoIdx = url.indexOf(videoMarker);
+                if (videoIdx !== -1) {
+                    var videoBase = url.slice(0, videoIdx + videoMarker.length);
+                    var videoRest = url.slice(videoIdx + videoMarker.length);
+                    var firstSlash = videoRest.indexOf('/');
+                    // Cloudinary stamps "/v1234567/" before the folder path; a bare
+                    // numeric segment after "v" is that stamp, anything else is a folder.
+                    var videoPath = (firstSlash !== -1 && /^v\d+$/.test(videoRest.slice(0, firstSlash)))
+                        ? videoRest.slice(firstSlash + 1)
+                        : videoRest;
+                    var pathSlash = videoPath.lastIndexOf('/');
+                    var pathDot = videoPath.lastIndexOf('.');
+                    var still = pathDot > pathSlash ? videoPath.slice(0, pathDot) + '.jpg' : videoPath + '.jpg';
+                    return videoBase + 'w_' + w + ',h_' + h + ',c_fill,q_auto,f_jpg/' + still;
+                }
+                var imageMarker = '/image/upload/';
+                var imageIdx = url.indexOf(imageMarker);
+                if (imageIdx !== -1) {
+                    return url.slice(0, imageIdx + imageMarker.length) +
+                        'w_' + w + ',h_' + h + ',c_fill,q_auto,f_auto/' +
+                        url.slice(imageIdx + imageMarker.length);
+                }
+                return url;
+            }
+
+            /**
+             * Classify an attachment for the tile: 'image', 'video' or 'file'.
+             * @param {object} att Cloudinary attachment record
+             * @returns {string} the tile kind
+             */
+            function trackAttachmentKind(att) {
+                var resourceType = (att && att.resource_type) || '';
+                var format = String((att && att.format) || '');
+                if (resourceType === 'video' || /^(mp4|webm|ogv|mov|m4v)$/i.test(format)) return 'video';
+                if (resourceType === 'image' || /^(jpg|jpeg|png|gif|webp|bmp|svg)$/i.test(format)) return 'image';
+                return 'file';
+            }
+
+            /**
+             * Markup for one small attachment tile.
+             * @param {object} att   Cloudinary attachment record
+             * @param {number} index position in the list (used for the fallback name)
+             * @returns {string} the tile's HTML
+             */
+            function trackAttachmentTileHtml(att, index) {
+                var url = (att && att.secure_url) || '';
+                var name = (att && att.name) || ('Attachment ' + (index + 1));
+                var kind = trackAttachmentKind(att);
+                var safeName = submitEscapeHTML(name);
+                var icon = submitGetAttachmentIcon(att && att.resource_type, att && att.format);
+                var color = submitGetAttachmentColor(att && att.format);
+                var previewable = kind === 'image' || kind === 'video';
+                var thumb = previewable ? trackThumbUrl(url, 240, 240) : '';
+                return '<a class="track-attachment-tile" href="' + submitEscapeHTML(url) + '"' +
+                    ' target="_blank" rel="noopener noreferrer"' +
+                    ' data-track-attachment="' + submitEscapeHTML(url) + '"' +
+                    ' data-track-attachment-kind="' + kind + '"' +
+                    ' data-track-attachment-name="' + safeName + '"' +
+                    ' title="' + safeName + '">' +
+                    '<div class="track-attachment-thumb">' +
+                        '<i class="fas ' + icon + ' track-attachment-icon" style="color:' + color + ';" aria-hidden="true"></i>' +
+                        (thumb
+                            ? '<img class="track-attachment-thumb-img" src="' + submitEscapeHTML(thumb) + '" alt="" loading="lazy" decoding="async">'
+                            : '') +
+                        (kind === 'video'
+                            ? '<i class="fas fa-play track-attachment-play" aria-hidden="true"></i>'
+                            : '') +
+                    '</div>' +
+                    '<div class="track-attachment-label">' + safeName + '</div>' +
+                '</a>';
+            }
+
+            /**
+             * Fill a container with the compact tile grid.
+             * @param {HTMLElement} container the box to fill
+             * @param {Array} list attachment records
+             * @param {string} emptyText text shown when there is nothing to show
+             */
+            function renderTrackAttachments(container, list, emptyText) {
+                if (!container) return;
+                var items = Array.isArray(list)
+                    ? list.filter(function(a) { return a && a.secure_url; })
+                    : [];
+                if (items.length === 0) {
+                    container.innerHTML = emptyText || '\u2014';
+                    return;
+                }
+                var html = '<div class="attachments-inline">';
+                for (var i = 0; i < items.length; i++) {
+                    html += trackAttachmentTileHtml(items[i], i);
+                }
+                html += '</div>';
+                container.innerHTML = html;
+            }
+
+            // ============================================================
+            //  IN-APP ATTACHMENT VIEWER (opened by a tile click)
+            //  One modal is reused for every picture/clip and its body is
+            //  emptied on close, so a video stops and frees its memory.
+            // ============================================================
+            var trackViewer = document.getElementById('trackAttachmentViewer');
+            var trackViewerBody = document.getElementById('trackViewerBody');
+            var trackViewerTitle = document.getElementById('trackViewerTitle');
+            var trackViewerIcon = document.getElementById('trackViewerIcon');
+            var closeTrackViewerBtn = document.getElementById('closeTrackViewer');
+            // Tile that opened the lightbox, so focus can be handed back on close.
+            var trackViewerLastFocus = null;
+
+            function closeTrackAttachmentViewer() {
+                if (!trackViewer) return;
+                trackViewer.classList.remove('active');
+                // Emptying the body stops playback and releases the video element.
+                if (trackViewerBody) trackViewerBody.innerHTML = '';
+                // Hand focus back to the tile that opened the lightbox.
+                if (trackViewerLastFocus && trackViewerLastFocus.focus) trackViewerLastFocus.focus();
+                trackViewerLastFocus = null;
+            }
+
+            /**
+             * Open the lightbox with the full media behind a tile.
+             * @param {string} url  the full-size file URL
+             * @param {string} name the file name shown in the floating caption
+             * @param {string} kind 'image' or 'video'
+             */
+            function openTrackAttachmentViewer(url, name, kind) {
+                if (!trackViewer || !trackViewerBody) return;
+                var type = (kind === 'video' || kind === 'image') ? kind : '';
+                if (trackViewerTitle) trackViewerTitle.textContent = name || 'Attachment';
+                if (trackViewerIcon) {
+                    trackViewerIcon.className = 'fas ' + (type === 'video' ? 'fa-file-video' : 'fa-file-image');
+                }
+                trackViewerLastFocus = document.activeElement;
+                trackViewerBody.innerHTML = '';
+                var media = null;
+                if (!url) {
+                    trackViewerBody.innerHTML = '<div class="track-viewer-empty"><i class="fas fa-file"></i>No preview available for this file.</div>';
+                } else if (type === 'video') {
+                    media = document.createElement('video');
+                    media.src = url;
+                    media.controls = true;
+                    media.playsInline = true;
+                    media.preload = 'metadata';
+                } else {
+                    media = document.createElement('img');
+                    media.src = url;
+                    media.alt = name || 'Attachment';
+                }
+                if (media) {
+                    media.className = 'track-viewer-media';
+                    // A dead url shows the same message as a file with no preview, instead of
+                    // leaving the browser's broken-media glyph on screen.
+                    media.addEventListener('error', function() {
+                        trackViewerBody.innerHTML = '<div class="track-viewer-empty"><i class="fas fa-triangle-exclamation"></i>This file could not be loaded.</div>';
+                    });
+                    trackViewerBody.appendChild(media);
+                }
+                trackViewer.classList.add('active');
+                // Focus the floating close button so Escape / Enter dismiss the lightbox.
+                if (closeTrackViewerBtn) closeTrackViewerBtn.focus();
+            }
+
+            if (closeTrackViewerBtn) closeTrackViewerBtn.addEventListener('click', closeTrackAttachmentViewer);
+            if (trackViewer) {
+                trackViewer.addEventListener('click', function(e) {
+                    if (e.target === trackViewer) closeTrackAttachmentViewer();
+                });
+            }
+            // Escape closes the viewer (arrow keys / zoom stay in the browser).
+            document.addEventListener('keydown', function(e) {
+                if (e.key === 'Escape' && trackViewer && trackViewer.classList.contains('active')) {
+                    closeTrackAttachmentViewer();
+                }
+            });
+            // Plain clicks on a picture/clip tile open the in-app viewer; modifier
+            // clicks and every other file type keep the browser's own handling.
+            document.addEventListener('click', function(e) {
+                if (e.defaultPrevented || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+                var tile = e.target && e.target.closest ? e.target.closest('a.track-attachment-tile') : null;
+                if (!tile) return;
+                var kind = tile.getAttribute('data-track-attachment-kind') || '';
+                if (kind !== 'image' && kind !== 'video') return;
+                e.preventDefault();
+                openTrackAttachmentViewer(
+                    tile.getAttribute('data-track-attachment') || tile.getAttribute('href') || '',
+                    tile.getAttribute('data-track-attachment-name') || 'Attachment',
+                    kind
+                );
+            });
+            // A poster frame that fails to load falls back to the tile's glyph
+            // (error events do not bubble, so this listener captures them).
+            document.addEventListener('error', function(e) {
+                var img = e.target;
+                if (!img || !img.classList || !img.classList.contains('track-attachment-thumb-img')) return;
+                var tile = img.closest ? img.closest('.track-attachment-tile') : null;
+                if (tile) tile.classList.add('thumb-missing');
+            }, true);
+
+            function displayTicketData(data) {
+                // Keep the Approved Report dropdown collapsed on every fresh lookup
+                var reportCollapse = document.getElementById('trackReportCollapse');
+                if (reportCollapse) reportCollapse.open = false;
+                // ===== 2-Day Tracking Access: show when the viewing window ends =====
+                var accessUntilEl = document.getElementById('trackAccessUntil');
+                if (accessUntilEl) {
+                    var accessExpires = (typeof window.getTrackingAccessExpiry === 'function')
+                        ? window.getTrackingAccessExpiry(data) : null;
+                    if (accessExpires) {
+                        accessUntilEl.style.display = '';
+                        accessUntilEl.textContent = 'Viewing access until ' + accessExpires.toLocaleString('en-US', {
+                            month: 'short', day: 'numeric', year: 'numeric',
+                            hour: 'numeric', minute: '2-digit', hour12: true
+                        });
+                    } else {
+                        accessUntilEl.style.display = 'none';
+                        accessUntilEl.textContent = '';
+                    }
+                }
+                document.getElementById('trackDisplayId').textContent = data.ticketNumber || '\u2014';
+                var statusEl = document.getElementById('trackDisplayStatus');
+                var status = data.status || 'Pending';
+                // Superadmin approval flow: a resolved ticket only counts as fully
+                // "Resolved" after the superadmin approves it. While pending/rejected,
+                // the operator sees "Pending Approval" so the status is consistent
+                // with the admin dashboard and the Approvals tab.
+                var approvalStatus = data.approvalStatus || 'pending';
+                if (status === 'Resolved') {
+                    status = approvalStatus === 'approved' ? 'Resolved' : 'Pending Approval';
+                } else if (status === 'For Revision') {
+                    status = 'For Revision';
+                }
+                var statusClass = status.toLowerCase().replace(/\s+/g, '-');
+                if (statusEl) {
+                    statusEl.textContent = status;
+                    statusEl.className = 'track-status-badge ' + statusClass;
+                }
+                // Rejection reason — shown only when the ticket was rejected
+                // (reads top-level `rejectionReason`, legacy `approvalReason`,
+                //  and the nested `rejection.reason` object written by the reject flow)
+                var rejectionWrap = document.getElementById('trackRejectionWrap');
+                var rejectionEl = document.getElementById('trackDisplayRejection');
+                if (rejectionWrap && rejectionEl) {
+                    var rejectionObj = (data.rejection && data.rejection.reason) ? data.rejection : null;
+                    var reasonText = data.rejectionReason || data.approvalReason || (rejectionObj ? rejectionObj.reason : '') || '';
+                    var rejectedBy = data.rejectedBy || (rejectionObj ? rejectionObj.rejectedBy : '') || '';
+                    if ((approvalStatus === 'rejected' || status === 'For Revision') && reasonText) {
+                        rejectionEl.textContent = reasonText +
+                            (rejectedBy ? ' \u2014 rejected by ' + rejectedBy : '');
+                        rejectionWrap.style.display = 'block';
+                    } else {
+                        rejectionEl.textContent = '';
+                        rejectionWrap.style.display = 'none';
+                    }
+                }
+document.getElementById('trackDisplayBranch').textContent = data.branch || '\u2014';
+                document.getElementById('trackDisplayIncident').textContent = data.incident || '\u2014';
+                document.getElementById('trackDisplayDescription').textContent = data.description || '\u2014';
+
+                // ===== Resolution notes (approved resolutions only) =====
+                // Rendered via the shared renderResolutionNotes() helper.
+                renderResolutionNotes(data);
+                // ===== Operator's report tiles =====
+                // Small square thumbnails (pictures, clip poster frames with a
+                // play badge, file glyphs) via renderTrackAttachments(). The
+                // requester's own uploads are filtered out by
+                // getTrackOperatorAttachments().
+                var attachmentsEl = document.getElementById('trackDisplayAttachments');
+                renderTrackAttachments(attachmentsEl, getTrackOperatorAttachments(data), '\u2014');
+                // ===== Resolved Additional Footage Section =====
+                // Shows attachments that were added in response to a footage
+                // request, so users can easily see their request was fulfilled.
+                renderResolvedFootage(data);
+                renderFootageRequests(data);
+                trackResult.style.display = 'block';
+            }
+
+            function lookupTicket() {
+                hideValidationError();
+
+                var ticketNumber = trackInput.value.trim();
+                var contactValue = trackContactInput.value.trim();
+
+                // Validate both fields are filled
+                if (!ticketNumber && !contactValue) {
+                    trackValidationMsg.textContent = 'Please enter both a ticket number and your contact/email.';
+                    trackValidationError.style.display = 'flex';
+                    trackInput.classList.add('input-error');
+                    trackContactInput.classList.add('input-error');
+                    trackInput.focus();
+                    return;
+                }
+                if (!ticketNumber) {
+                    trackValidationMsg.textContent = 'Please enter your ticket number.';
+                    trackValidationError.style.display = 'flex';
+                    trackInput.classList.add('input-error');
+                    trackInput.focus();
+                    return;
+                }
+                if (!contactValue) {
+                    trackValidationMsg.textContent = 'Please enter your contact number or email used during submission.';
+                    trackValidationError.style.display = 'flex';
+                    trackContactInput.classList.add('input-error');
+                    trackContactInput.focus();
+                    return;
+                }
+
+                trackResult.style.display = 'none';
+                trackNotFound.style.display = 'none';
+                trackPendingApproval.style.display = 'none';
+                if (trackExpired) trackExpired.style.display = 'none';
+                clearReopenState();
+                trackLoading.style.display = 'block';
+
+                // Lookup ticket by exact document ID (ticket number).
+                // SECURITY: this is an exact match only — no partial/fuzzy matching.
+                db.collection('tickets').doc(ticketNumber).get().then(function(doc) {
+                    trackLoading.style.display = 'none';
+
+                    if (!doc.exists) {
+                        trackNotFoundMsg.textContent = 'No ticket found with that number. Please check and try again.';
+                        trackNotFound.style.display = 'block';
+                        return;
+                    }
+
+                    var data = doc.data();
+                    // Two-factor verification: check contact OR email match
+                    var contactMatch = data.contact && data.contact.toLowerCase() === contactValue.toLowerCase();
+                    var emailMatch = data.email && data.email.toLowerCase() === contactValue.toLowerCase();
+
+                    if (contactMatch || emailMatch) {
+            // ===== Visibility rule: PENDING tickets are NOT shown =====
+                        // While a ticket is Pending, In Progress, awaiting
+                        // superadmin approval, or sent back For Revision, the
+                        // reporter only sees an informational notice. The full
+                        // ticket details (status + resolution) are revealed only
+                        // once the superadmin has APPROVED the resolution.
+                        var approvalStatus = data.approvalStatus || 'pending';
+                        var isApproved = approvalStatus === 'approved';
+                        if (!isApproved) {
+                            trackPendingApproval.style.display = 'block';
+                            return;
+                        }
+                        // ===== 2-Day Tracking Access: approved tickets expire =====
+                        // After 2 days (from approval or the last superadmin Resend)
+                        // the manager/store can no longer view the report + footage.
+                        // Data is never deleted — viewing is only blocked here until
+                        // the superadmin resends the ticket.
+                        var accessExpiresAt = (typeof window.getTrackingAccessExpiry === 'function')
+                            ? window.getTrackingAccessExpiry(data) : null;
+                        var isAccessExpired = (typeof window.isTrackingAccessExpired === 'function')
+                            ? window.isTrackingAccessExpired(data)
+                            : (accessExpiresAt ? accessExpiresAt.getTime() <= Date.now() : false);
+                        if (isAccessExpired) {
+                            if (trackExpiredMsg) {
+                                var expiryText = accessExpiresAt
+                                    ? accessExpiresAt.toLocaleString('en-US', {
+                                        month: 'short', day: 'numeric', year: 'numeric',
+                                        hour: 'numeric', minute: '2-digit', hour12: true
+                                    })
+                                    : '';
+                                trackExpiredMsg.textContent = expiryText
+                                    ? 'Viewing access for this ticket expired on ' + expiryText + '. Report details and footage are no longer available.'
+                                    : 'Viewing access for this ticket has expired. Report details and footage are no longer available.';
+                            }
+                            trackExpired.style.display = 'block';
+                            // ===== Re-access request: arm the form for THIS ticket =====
+                            // currentTrackTicketId stays null on purpose so the
+                            // "Request Additional" footage flow can never be used
+                            // while access is expired.
+                            currentReopenTicketId = doc.id;
+                            currentTrackData = data;
+                            resetReopenForm();
+                            renderReopenRequests(data);
+                            return;
+                        }
+                        // Ticket is approved by the superadmin — show details
+                        currentTrackTicketId = doc.id;
+                        currentTrackData = data;
+                        displayTicketData(data);
+                    } else {
+                        // Credentials do not match
+                        trackNotFoundMsg.textContent = 'Ticket number and contact/email combination do not match. Please verify your credentials.';
+                        trackNotFound.style.display = 'block';
+                    }
+                }).catch(function(err) {
+                    trackLoading.style.display = 'none';
+                    console.error('Lookup error:', err);
+                    trackNotFoundMsg.textContent = 'An error occurred while searching. Please try again.';
+                    trackNotFound.style.display = 'block';
+                });
+            }
+
+            if (trackLookupBtn) trackLookupBtn.addEventListener('click', lookupTicket);
+
+            // ===== Deep link (?track=…): open the Track modal and prefill the ticket
+            // number automatically, so the requester only has to type their
+            // email/contact and press "Lookup Status". Runs once, after a short
+            // delay so the modal is guaranteed to be interactive.
+            //
+            // ⚠️ `trackBtn` IS DELIBERATELY NOT IN THIS CONDITION. It used to be,
+            // as a proxy for "the Track button is on this page". The button has
+            // been removed along with the submission form, so keeping that test
+            // would have made the deep link stop opening the modal SILENTLY —
+            // every approval email already sent to a requester would have landed
+            // on a page with no visible way in. The condition is now simply
+            // "there is a ticket number in the URL and we have not done this yet".
+            if (deepLinkedTicketNumber && !deepLinkPrefillDone) {
+                setTimeout(function() {
+                    if (typeof openTrackModal === 'function') openTrackModal();
+                }, 600);
+            }
+            if (trackInput) {
+                trackInput.addEventListener('keypress', function(e) {
+                    if (e.key === 'Enter') {
+                        e.preventDefault();
+                        trackContactInput.focus();
+                    }
+                });
+            }
+            if (trackContactInput) {
+                trackContactInput.addEventListener('keypress', function(e) {
+                    if (e.key === 'Enter') {
+                        e.preventDefault();
+                        lookupTicket();
+                    }
+                });
+            }
+
+            // ============================================================
+            //  REQUEST ADDITIONAL FOOTAGE (Reviewer -> Operator hand-off)
+            //  Appends the request as a note onto the ticket's `comments`
+            //  array (type: "footage_request") and resets the ticket state
+            //  back to the operator: status "In Progress" + approval "pending".
+            //  Self-contained (this page does not load script.js).
+            // ============================================================
+            function formatFootageNoteTimestamp(ts) {
+                if (!ts) return '';
+                var d = (ts && typeof ts.toDate === 'function') ? ts.toDate() : new Date(ts);
+                if (!d || isNaN(d.getTime())) return '';
+                return d.toLocaleString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit', hour12: true });
+            }
+            // ============================================================
+            //  RESOLVED ADDITIONAL FOOTAGE RENDERER
+            //  Shows attachments that were added in response to a footage
+            //  request (stored in `resolvedAdditionalFootage`), in a
+            //  separate section so users can see their request was fulfilled.
+            // ============================================================
+            function renderResolvedFootage(data) {
+                var section = document.getElementById('trackResolvedFootageSection');
+                if (!section) return;
+                var additionalFootage = data.resolvedAdditionalFootage;
+                if (additionalFootage && Array.isArray(additionalFootage) && additionalFootage.length > 0) {
+                    section.style.display = 'block';
+                    // Show the original request text (most recent request)
+                    var requestTextEl = document.getElementById('trackResolvedFootageRequestText');
+                    if (requestTextEl) {
+                        var notes = Array.isArray(data.comments)
+                            ? data.comments.filter(function(c) { return c && c.type === 'footage_request'; })
+                            : [];
+                        var latest = notes.length > 0 ? notes[notes.length - 1] : null;
+                        requestTextEl.textContent = latest
+                            ? 'Fulfilled request: ' + (latest.text || '')
+                            : '';
+                    }
+                    // Render the additional footage as the same compact tiles
+                    renderTrackAttachments(
+                        document.getElementById('trackResolvedFootageGrid'),
+                        additionalFootage,
+                        ''
+                    );
+                } else {
+                    section.style.display = 'none';
+                }
+            }
+            function renderFootageRequests(data) {
+                if (!trackFootageRequests) return;
+                var notes = Array.isArray(data.comments) ? data.comments : [];
+                notes = notes.filter(function(n) { return n && n.type === 'footage_request'; });
+                trackFootageRequests.innerHTML = '';
+                if (notes.length === 0) return;
+                // Newest first
+                for (var i = notes.length - 1; i >= 0; i--) {
+                    var n = notes[i];
+                    var noteEl = document.createElement('div');
+                    noteEl.className = 'footage-note';
+                    var textEl = document.createElement('div');
+                    textEl.className = 'footage-note-text';
+                    textEl.textContent = n.text || '';
+                    noteEl.appendChild(textEl);
+                    var metaEl = document.createElement('div');
+                    metaEl.className = 'footage-note-meta';
+                    var meta = 'Requested by ' + (n.requestedBy || 'anonymous');
+                    var when = formatFootageNoteTimestamp(n.requestedAt);
+                    if (when) meta += ' on ' + when;
+                    metaEl.textContent = meta;
+                    noteEl.appendChild(metaEl);
+                    trackFootageRequests.appendChild(noteEl);
+                }
+            }
+            function toggleFootageBox(show) {
+                if (!trackFootageSection) return;
+                var resultBody = document.getElementById('trackResultBody');
+                if (resultBody) resultBody.style.display = show ? 'none' : '';
+                if (show) {
+                    trackFootageSection.style.display = 'flex';
+                    if (trackFootageBox) trackFootageBox.style.display = '';
+                    if (trackFootageDetails) trackFootageDetails.value = '';
+                    if (trackFootageDetails) trackFootageDetails.focus();
+                } else {
+                    trackFootageSection.style.display = 'none';
+                    if (trackFootageError) trackFootageError.style.display = 'none';
+                    if (trackFootageSuccess) trackFootageSuccess.style.display = 'none';
+                }
+                if (trackRequestFootageBtn) {
+                    trackRequestFootageBtn.innerHTML = show
+                        ? '<i class="fas fa-arrow-left"></i> <span>Back</span>'
+                        : '<i class="fas fa-video"></i> <span>Request Additional</span>';
+                }
+            }
+            function resetFootageForm() {
+                if (trackFootageSection) trackFootageSection.style.display = 'none';
+                var resultBody = document.getElementById('trackResultBody');
+                if (resultBody) resultBody.style.display = '';
+                if (trackFootageDetails) trackFootageDetails.value = '';
+                if (trackFootageError) {
+                    trackFootageError.style.display = 'none';
+                    if (trackFootageMsg) trackFootageMsg.textContent = '';
+                }
+                if (trackFootageSuccess) trackFootageSuccess.style.display = 'none';
+                if (trackRequestFootageBtn) {
+                    trackRequestFootageBtn.innerHTML = '<i class="fas fa-video"></i> <span>Request Additional</span>';
+                }
+            }
+
+            function submitFootageRequest() {
+                if (!currentTrackTicketId) {
+                    if (trackFootageMsg) trackFootageMsg.textContent = 'Please look up a ticket first.';
+                    if (trackFootageError) trackFootageError.style.display = 'flex';
+                    return;
+                }
+                var details = trackFootageDetails ? trackFootageDetails.value.trim() : '';
+                if (!details) {
+                    if (trackFootageMsg) trackFootageMsg.textContent = 'Please describe what footage is needed.';
+                    if (trackFootageError) trackFootageError.style.display = 'flex';
+                    if (trackFootageDetails) trackFootageDetails.focus();
+                    return;
+                }
+                trackFootageError.style.display = 'none';
+                trackSubmitFootage.disabled = true;
+                var originalLabel = trackSubmitFootage.innerHTML;
+                trackSubmitFootage.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Sending...';
+                var userEmail = (auth && auth.currentUser && auth.currentUser.email) || 'anonymous';
+                var note = {
+                    type: 'footage_request',
+                    text: details,
+                    requestedBy: userEmail,
+                    requestedAt: new Date()
+                };
+                // Request notification permission synchronously while we still have the
+                // click's user activation (calling it after the async Firestore write can
+                // be too late for the browser). No-op if already granted/denied.
+                try {
+                    if (('Notification' in window) && Notification.permission === 'default') {
+                        Notification.requestPermission().catch(function() {});
+                    }
+                } catch (e) { /* ignore */ }
+                // Attach the request as a note (arrayUnion-append to `comments`) and
+                // transition the ticket to "Insufficient Footage" so the
+                // responsible party knows additional footage is required.
+                db.collection('tickets').doc(currentTrackTicketId).update({
+                    status: 'Insufficient Footage',
+                    approvalStatus: 'pending',
+                    comments: firebase.firestore.FieldValue.arrayUnion(note),
+                    updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+                }).then(function() {
+                    resetFootageForm();
+                    if (trackFootageSuccess) trackFootageSuccess.style.display = 'flex';
+                    // Optimistically re-render the note history (preserves existing notes).
+                    if (trackFootageRequests) {
+                        var existingComments = (currentTrackData && Array.isArray(currentTrackData.comments)) ? currentTrackData.comments : [];
+                        renderFootageRequests(Object.assign({}, currentTrackData || {}, { comments: existingComments.concat([note]) }));
+                    }
+                    // Immediately reflect the new status badge.
+                    var statusEl = document.getElementById('trackDisplayStatus');
+                    if (statusEl) {
+                        statusEl.textContent = 'Insufficient Footage';
+                        statusEl.className = 'track-status-badge insufficient-footage';
+                    }
+                    // ===== Desktop notification for the requester (Windows Action Center) =====
+                    // Fires directly from the track page so the request is confirmed even if the
+                    // main dashboard tab isn't open. Uses the SAME `tag` as the dashboard listener
+                    // so, when both tabs are open, the second notification replaces the first
+                    // (no stacking/duplicate toasts). Permission was requested synchronously
+                    // above (while we still had the click gesture), so by the time this callback
+                    // runs the browser has already updated Notification.permission.
+                    try {
+                        if ('Notification' in window && Notification.permission === 'granted') {
+                            var trackTicketSnap = Object.assign({}, currentTrackData || {}, {
+                                id: currentTrackTicketId,
+                                status: 'Insufficient Footage',
+                                approvalStatus: 'pending',
+                                comments: (existingComments || []).concat([note])
+                            });
+                            new Notification('🎥 Additional Footage Requested — Jiangnan Command Center', {
+                                body: 'Ticket: ' + (trackTicketSnap.ticketNumber || currentTrackTicketId) +
+                                      '\nBranch: ' + (trackTicketSnap.branch || 'Unknown') +
+                                      '\nRequested by: ' + (note.requestedBy || 'Unknown') +
+                                      (note.text ? '\nDetails: ' + note.text : ''),
+                                icon: 'tamang logo.png',
+                                tag: 'footage-ticket-' + currentTrackTicketId,
+                                requireInteraction: true,
+                                silent: true   // sound is handled by the dashboard listener
+                            });
+                        }
+                    } catch (e) {
+                        console.warn('[Track] Footage request notification failed:', e);
+                    }
+                }).catch(function(err) {
+                    console.error('Footage request error:', err);
+                    if (trackFootageMsg) trackFootageMsg.textContent = 'Failed to send the request. Please try again.';
+                    if (trackFootageError) trackFootageError.style.display = 'flex';
+                }).finally(function() {
+                    if (trackSubmitFootage) {
+                        trackSubmitFootage.disabled = false;
+                        trackSubmitFootage.innerHTML = originalLabel;
+                    }
+                });
+            }
+            // Wire up the new tracking actions
+            if (trackRequestFootageBtn) trackRequestFootageBtn.addEventListener('click', function() {
+                if (trackFootageSection && trackFootageSection.style.display === 'flex') {
+                    toggleFootageBox(false);
+                } else {
+                    toggleFootageBox(true);
+                }
+            });
+            if (trackCancelFootage) trackCancelFootage.addEventListener('click', function() { toggleFootageBox(false); });
+            if (trackSubmitFootage) trackSubmitFootage.addEventListener('click', submitFootageRequest);
+
+
+        })();
+    </script>
+    <!-- Theme manager: dark/light toggle (floating button, no header on this page) -->
+    <script src="js/theme.js"></script>
+</body>
+</html>

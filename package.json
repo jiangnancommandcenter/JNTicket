@@ -1,0 +1,14 @@
+{
+  "name": "implement",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "serve": "python -m http.server 5500",
+    "reset": "python -m http.server 5501",
+    "seed": "node scripts/seed.js",
+    "test": "node --check firebase.js && node --check script.js && node --check js/auth.js && node --check js/notifications.js && node --check js/owner-dashboard.js && node --check js/owner-ticket-form.js && node --check js/email.js && node --check js/email-config.js && node --check js/chat.js && node --check js/chat-unsend.js && node --check js/error-reporter.js && node --check js/command-palette.js && node --check js/onboarding.js && node --check js/violation-report.js && node --check js/attachment-viewer.js && node --check js/hr-violations.js && node --check js/owner-violations.js && node --check js/remarks.js && node --check scripts/seed.js && node test/tracking-access.test.js && node test/ticket-email.test.js && node test/chat-access.test.js && node test/chat-ticket-mentions.test.js && node test/chat-violation-mentions.test.js && node test/chat-conversations.test.js && node test/chat-rules.test.js && node test/set-role.test.js && node test/owner-ticket-approval.test.js && node test/owner-pending-tickets.test.js && node test/approval-default-filter.test.js && node test/ticket-date-search.test.js && node test/owner-ticket-form.test.js && node test/owner-mobile.test.js && node test/violations-badge.test.js && node test/violation-hr-transfer.test.js && node test/violation-hr-view.test.js && node test/error-reporter.test.js && node test/owner-dark-mode.test.js && node test/command-palette.test.js && node test/onboarding.test.js && node test/uptime-offline.test.js && node test/auth-guard.test.js && node test/script-collision.test.js && node test/email-config-deploy.test.js && node test/bootstrap-seed.test.js && node test/attachment-shapes.test.js && node test/attachment-viewer.test.js && node test/footage-accumulation.test.js && node test/operator-upload-indicator.test.js && node test/violation-area-manager-transfer.test.js && node test/no-demo-reseed.test.js && node test/expiry-on-first-open.test.js && node test/access-countdown.test.js && node test/approval-rearm.test.js && node test/hr-remarks.test.js && node test/chat-unsend.test.js && node test/add-status-modal.test.js"
+  },
+  "devDependencies": {
+    "firebase-admin": "^12.7.0"
+  }
+}

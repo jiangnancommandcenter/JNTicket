@@ -1,0 +1,1953 @@
+/* ==============================================================
+   HR <-> SUPERADMIN CHAT
+   Loaded after theme.css on main.html + ownerdashboard.html.
+
+   Every colour comes from the shared CSS variables defined in
+   style.css (light) and overridden in theme.css (dark), so the
+   whole component themes automatically with the rest of the app —
+   no dark-mode rules are needed here.
+   ============================================================== */
+
+/* --------------------------------------------------------------
+   Floating launcher (chat circle) — top-right, below the header
+   -------------------------------------------------------------- */
+
+.chat-launcher {
+    position: fixed;
+    /* Bottom-right is the ALWAYS-START corner. The circle is still
+       draggable during the session, but the position is deliberately
+       not persisted across loads (see js/chat.js) — every fresh load
+       begins here, so it can never "wander" between viewports. */
+    bottom: 20px;
+    right: 20px;
+    z-index: 950;
+
+    width: 54px;
+    height: 54px;
+    border-radius: 50%;
+    border: 1px solid var(--border-color);
+
+    background: linear-gradient(135deg, var(--color-primary), var(--color-primary-hover));
+    color: #1E3A1B;
+
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.25rem;
+
+    /* grab / grabbing is set below */
+    cursor: pointer;
+    box-shadow: var(--shadow-lg);
+    transition: var(--transition);
+}
+
+/* --------------------------------------------------------------
+   Draggable launcher
+
+   The circle can be dragged anywhere on the page DURING THE SESSION.
+   Once dragged, js/chat.js writes inline `left`/`top` (and `right:
+   auto`) to move it, so the `bottom`/`right` above is only the
+   STARTING default — it re-applies on every load.
+
+   `touch-action: none` is essential: without it a touch drag scrolls
+   the page underneath instead of moving the button.
+   -------------------------------------------------------------- */
+
+.chat-launcher {
+    cursor: grab;
+    touch-action: none;
+
+    /* Stop the browser from firing its native image/link drag, and stop
+       a double-click from selecting text while dragging. */
+    -webkit-user-drag: none;
+    user-select: none;
+    -webkit-user-select: none;
+}
+
+.chat-launcher:active { cursor: grabbing; }
+
+/* While dragging, kill the hover transform and transition so the circle
+   tracks the pointer exactly instead of lagging or jittering. */
+.chat-launcher.chat-launcher-dragging,
+.chat-launcher.chat-launcher-dragging:hover {
+    transform: none;
+    transition: none;
+    cursor: grabbing;
+}
+
+/* A slightly larger grab area makes the small circle easy to catch. */
+.chat-launcher::before {
+    content: "";
+    position: absolute;
+    inset: -6px;
+    border-radius: 50%;
+}
+
+.chat-launcher:hover {
+    transform: translateY(-2px) scale(1.04);
+    box-shadow: 0 8px 26px rgba(114, 191, 106, 0.5);
+    color: #1E3A1B;
+}
+
+.chat-launcher:focus-visible {
+    outline: 2px solid var(--color-primary);
+    outline-offset: 3px;
+}
+
+.chat-launcher[hidden] { display: none; }
+
+/* Blocked by the deployed Firestore rules. The circle STAYS VISIBLE
+   (greyed out, cursor not-allowed) so the user can see chat exists and
+   hover for the reason — it must never silently disappear, which made a
+   rules mismatch look like a missing feature. */
+.chat-launcher.chat-launcher-disabled,
+.chat-launcher.chat-launcher-disabled:hover {
+    filter: grayscale(0.85);
+    opacity: 0.55;
+    cursor: not-allowed;
+    transform: none;
+    box-shadow: none;
+}
+
+.chat-launcher.chat-launcher-disabled .chat-launcher-badge { display: none; }
+
+/* Unread count bubble on the launcher */
+.chat-launcher-badge {
+    position: absolute;
+    top: -3px;
+    right: -3px;
+    min-width: 21px;
+    height: 21px;
+    padding: 0 6px;
+    border-radius: 11px;
+
+    background: var(--color-danger);
+    color: #ffffff;
+    font-size: 0.68rem;
+    font-weight: 700;
+    line-height: 21px;
+    text-align: center;
+
+    border: 2px solid var(--bg-secondary);
+}
+
+.chat-launcher-badge[hidden] { display: none; }
+
+/* --------------------------------------------------------------
+   Chat modal
+   -------------------------------------------------------------- */
+
+.chat-modal-overlay { z-index: 1000; }
+
+/* --------------------------------------------------------------
+   Chat SUSPENDED behind a ticket modal
+   --------------------------------------------------------------
+   Clicking a ticket chip must REPLACE the chat, not stack on top of
+   it. Both overlays sit at z-index 1000 (.modal-overlay in
+   style.css, .chat-modal-overlay above), and the chat overlay is
+   appended to <body> at runtime — so it comes LATER in DOM order and
+   wins the tie, which is why the ticket modal used to open behind the
+   chat. Rather than fight the z-index, the chat is suspended while
+   the modal has the screen.
+
+   `visibility` (not `display: none`) is deliberate: the element keeps
+   its layout box, so restoring it costs no reflow and the conversation
+   is exactly where the user left it — same scroll, same draft, same
+   room. pointer-events stops the invisible overlay swallowing clicks
+   meant for the modal behind it. */
+
+.chat-modal-overlay.chat-suspended {
+    visibility: hidden;
+    pointer-events: none;
+}
+
+/* Belt and braces for the swap itself: while a ticket OR VIOLATION modal is
+   open the page's own modals are lifted above the chat's 1000, so the
+   modal can never flash behind the chat during the transition. Scoped
+   to the suspended state so it is dropped the moment chat returns. */
+body.chat-ticket-open .modal-overlay {
+    z-index: 1100;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .chat-modal-overlay.chat-suspended { transition: none; }
+}
+
+.chat-modal-container {
+    display: flex;
+    flex-direction: column;
+    /* ⚠️ A FIXED height, not merely a cap. With only `max-height` the modal is
+       CONTENT-DRIVEN: it grew and shrank as messages loaded, as the typing bar
+       appeared and disappeared, and as the reply banner opened — the window
+       visibly "breathed" every few seconds and the thread jumped under the
+       cursor. The panes scroll internally instead (see .chat-log and
+       .chat-list), so a stable size costs nothing, and the scroll maths in
+       chat.js (els.log.scrollTop) keeps working because the scroll container
+       is still the log and never the modal body. */
+    height: min(720px, 82vh);
+    max-height: 82vh;
+    overflow: hidden;
+    /* Wide enough for the sidebar + a readable thread. The app's
+       `modal-lg` is sized for a form; the conversation list needs
+       noticeably more room, so the two-pane width is set here. */
+    width: min(920px, 94vw);
+}
+
+/* The modal body must NOT scroll. It holds the history pager AND the log;
+   if the body were the scroll container, `els.log.scrollTop = ...` in the JS
+   would be a silent no-op (a non-scrolling element ignores scrollTop), so
+   the chat would open showing older messages instead of the latest. The LOG
+   is the scroll container, which also keeps the "Load earlier messages"
+   control parked at the top while the thread scrolls under it.
+
+   ⚠️ No `min-height` floor here. With the container now a FIXED height, a
+   floor would win over it on a short window and push the modal off-screen. */
+.chat-modal-body {
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    flex: 1 1 auto;
+    min-height: 0;
+}
+
+.chat-sr-only {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+}
+
+/* --------------------------------------------------------------
+   Two-pane layout: conversation list + selected thread
+
+   The list is the LEFT pane and the thread the right. Both sit
+   inside .chat-layout, which is the row; .chat-thread is a COLUMN
+   so the existing log/typing-bar/composer stack keeps working.
+
+   ⚠️ .chat-thread must be a flex COLUMN with `min-height: 0`. It is
+   now a flex ITEM rather than a direct child of the modal
+   container, and without `min-height: 0` it refuses to shrink below
+   its content height — the log stops being scrollable, the browser
+   scrolls an ancestor instead, and every `els.log.scrollTop = ...`
+   in the JS becomes a silent no-op. That is the exact failure
+   documented on .chat-log, reintroduced by the new wrapper.
+   -------------------------------------------------------------- */
+
+.chat-layout {
+    display: flex;
+    flex-direction: row;
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow: hidden;
+}
+
+.chat-sidebar {
+    display: flex;
+    flex-direction: column;
+    flex: 0 0 260px;
+    width: 260px;
+    min-width: 0;
+    border-right: 1px solid var(--border-color);
+    background: var(--bg-secondary);
+    /* ⚠️ `position: relative` WAS here for the removed `.chat-newmenu` (the
+       floating picker anchored itself to the sidebar's bottom edge). Nothing
+       in the sidebar is positioned any more — the search box and the list are
+       both in flow — so it went with the picker. `.chat-sr-only` is absolute
+       but is the 1px clip technique, which is placement-independent. */
+}
+
+/* ⚠️ `.chat-icon-btn` and `.chat-newmenu*` (the floating "＋ new conversation"
+   picker) were REMOVED with the button itself: the conversation list already
+   offers every person a thread may be started with as a row, so those rules
+   styled a second entry point into the same list — and styled nothing at all
+   once the button was gone. `.chat-sidebar-head` went with them for the same
+   reason: its only child was that one button, so it was an empty flex row
+   reserving ~48px of dead space above the search box. */
+
+.chat-search {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    /* ⚠️ The 4px top margin used to sit under `.chat-sidebar-head`. With the
+       head gone the search box is the first thing in the sidebar, so it needs
+       the breathing room itself or it touches the top border. */
+    margin: 12px 12px 10px;
+    padding: 0 10px;
+    height: 36px;
+    border: 1px solid var(--border-color);
+    border-radius: 10px;
+    background: var(--bg-primary);
+    color: var(--text-muted);
+    flex: 0 0 auto;
+}
+
+.chat-search input {
+    flex: 1;
+    min-width: 0;
+    height: 100%;
+    border: 0;
+    outline: 0;
+    background: transparent;
+    color: var(--text-primary);
+    font-size: 0.85rem;
+}
+
+/* A search field's native clear button duplicates our own affordances
+   and inherits an OS-specific look, so it is suppressed. */
+.chat-search input::-webkit-search-cancel-button { -webkit-appearance: none; }
+
+.chat-list {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-y: auto;
+    padding: 0 6px 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.chat-list-empty {
+    margin: 0;
+    padding: 18px 12px;
+    text-align: center;
+    color: var(--text-muted);
+    font-size: 0.82rem;
+}
+
+/* ---- A conversation row ---- */
+
+.chat-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    width: 100%;
+    padding: 9px 10px;
+    border: 0;
+    border-radius: 12px;
+    background: transparent;
+    color: var(--text-primary);
+    text-align: left;
+    cursor: pointer;
+    transition: background 0.15s ease;
+}
+
+.chat-row:hover { background: var(--bg-tertiary); }
+
+.chat-row.is-active {
+    background: var(--bg-tertiary);
+    box-shadow: inset 2px 0 0 var(--color-primary);
+}
+
+.chat-row:focus-visible {
+    outline: 2px solid var(--color-primary);
+    outline-offset: -2px;
+}
+
+/* The row avatar is bigger than the in-message one, and must NOT
+   inherit `align-self: flex-end` from .chat-avatar — that exists to
+   hug the bottom of a message bubble and would misalign it here. */
+.chat-row .chat-avatar {
+    width: 34px;
+    height: 34px;
+    min-width: 34px;
+    font-size: 0.72rem;
+    align-self: center;
+}
+
+.chat-row-meta {
+    flex: 1 1 auto;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.chat-row-top,
+.chat-row-bottom {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    min-width: 0;
+}
+
+.chat-row-name {
+    font-size: 0.86rem;
+    font-weight: 600;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.chat-row-time {
+    flex: 0 0 auto;
+    font-size: 0.68rem;
+    color: var(--text-muted);
+}
+
+.chat-row-preview {
+    font-size: 0.76rem;
+    color: var(--text-muted);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    min-width: 0;
+}
+
+.chat-row-unread {
+    flex: 0 0 auto;
+    min-width: 18px;
+    height: 18px;
+    padding: 0 5px;
+    border-radius: 9px;
+    background: var(--color-primary);
+    color: #fff;
+    font-size: 0.66rem;
+    font-weight: 700;
+    line-height: 18px;
+    text-align: center;
+}
+
+/* ⚠️ The floating "New conversation" picker (`.chat-newmenu*`) was removed with
+   its ＋ button — the conversation list is the only way to start one. */
+
+/* ---- The thread column ---- */
+
+.chat-thread {
+    display: flex;
+    flex-direction: column;
+    flex: 1 1 auto;
+    /* See the warning at the top of this block: without this the log
+       stops being the scroll container and every scrollTop write is
+       silently ignored. */
+    min-height: 0;
+    min-width: 0;
+    overflow: hidden;
+}
+
+/* ---- Thread header ---- */
+
+.chat-topbar { gap: 10px; }
+
+.chat-heading {
+    flex: 1 1 auto;
+    min-width: 0;
+}
+
+.chat-heading h2 {
+    margin: 0;
+    font-size: 1rem;
+    font-weight: 700;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.chat-subtitle {
+    font-size: 0.72rem;
+    color: var(--text-muted);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+/* ---- Thread header: colour-coded ROLE pill (superadmin glance cue) ----
+   Same hues as the avatar fills so one colour = one role everywhere:
+   violet = Area Manager (owner), amber = RM/SM (rmsm), green = HR,
+   blue = superadmin. Kept small/subtle — it is a cue, not a banner. */
+.chat-role-pill {
+    display: inline-flex;
+    align-items: center;
+    font-size: 0.66rem;
+    font-weight: 700;
+    letter-spacing: 0.4px;
+    text-transform: uppercase;
+    padding: 1px 8px;
+    border-radius: 999px;
+    border: 1px solid transparent;
+    line-height: 1.5;
+    white-space: nowrap;
+}
+.chat-role-pill--owner {
+    color: #7c3aed;
+    background: rgba(124, 58, 237, 0.10);
+    border-color: rgba(124, 58, 237, 0.32);
+}
+/* RM/SM has its OWN colour (amber) so it reads differently from the Area
+   Manager's violet — one colour = one role, and the two are now distinct. */
+.chat-role-pill--rmsm {
+    color: #b45309;
+    background: rgba(245, 158, 11, 0.12);
+    border-color: rgba(245, 158, 11, 0.35);
+}
+.chat-role-pill--hr {
+    color: #15803d;
+    background: rgba(22, 163, 74, 0.12);
+    border-color: rgba(22, 163, 74, 0.35);
+}
+.chat-role-pill--superadmin {
+    color: #1d4ed8;
+    background: rgba(37, 99, 235, 0.12);
+    border-color: rgba(37, 99, 235, 0.35);
+}
+/* RANK marker on the superadmin pill: a gold border (and the ★ that
+   js/chat.js prefixes into the text) so the thread header says RANK, not just
+   role. The blue fill/text stay — gold accents the pill, it never replaces
+   the role hue. */
+.chat-role-pill--rank {
+    border-color: var(--chat-rank-gold, #F5B301);
+}
+
+.chat-thread-avatar {
+    width: 32px;
+    height: 32px;
+    min-width: 32px;
+    font-size: 0.7rem;
+    align-self: center;
+}
+
+.chat-thread-avatar[hidden] { display: none; }
+
+/* Only meaningful on narrow screens, where the list and the thread are
+   shown one at a time. */
+.chat-back-btn { display: none; }
+
+@media (max-width: 640px) {
+    /* One pane at a time. With no conversation open the LIST is shown;
+       `.chat-showing-thread` (set by selectConversation) swaps to the
+       thread and reveals the back button. */
+    .chat-sidebar {
+        flex: 1 1 auto;
+        width: 100%;
+        border-right: 0;
+    }
+
+    .chat-thread { display: none; }
+
+    .chat-showing-thread .chat-sidebar { display: none; }
+    .chat-showing-thread .chat-thread { display: flex; }
+
+    .chat-showing-thread .chat-back-btn { display: inline-flex; }
+}
+
+/* --------------------------------------------------------------
+   Message log
+   -------------------------------------------------------------- */
+
+/* THE scroll container. `min-height: 0` is essential: without it a flex
+   child refuses to shrink below its content height, the log never becomes
+   scrollable, and the browser scrolls an ancestor instead — which silently
+   breaks scrollLogToBottom(), the near-bottom detection, and the pagination
+   scroll anchor all at once.
+
+   ⚠️ The log is now nested inside `.chat-layout > .chat-thread`, so BOTH
+   wrappers must also carry `min-height: 0` (they do — see the two-pane
+   block). Each additional flex/grid layer between the log and the modal is
+   another place this can silently regress. */
+.chat-log {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    padding: 18px 20px;
+    background: var(--bg-tertiary);
+    overflow-y: auto;
+    flex: 1 1 auto;
+    min-height: 0;
+    /* ⚠️ MOBILE: suppress the NATIVE long-press menu so it does not fight our
+       custom context menu. Without these, a touch-and-hold on a message makes
+       the OS raise its own Copy / Select All / Share callout (and drag the blue
+       selection handles) ON TOP OF our overlay — the "double menu". user-select
+       stops the text from being selected at all; -webkit-touch-callout stops the
+       iOS link/image preview bubble. The message's own text is still readable;
+       it just is not selectable, which is exactly the Messenger/iOS behaviour. */
+    -webkit-user-select: none;
+    user-select: none;
+    -webkit-touch-callout: none;
+}
+
+.chat-empty {
+    margin: 0;
+    text-align: center;
+    color: var(--text-muted);
+    font-size: 0.88rem;
+    padding: 24px 0;
+}
+
+.chat-empty[hidden] { display: none; }
+
+/* Each message is a horizontal row: the avatar sits in a fixed-width column
+   on the LEFT, the message content stacks to its right. The avatar used to
+   sit in a header ABOVE the message, which cost a whole extra line of
+   vertical space per message for no information gain — now it hugs the
+   message it belongs to. */
+.chat-msg {
+    display: flex;
+    flex-direction: column;
+    max-width: 78%;
+}
+
+/* The row is THE flex container for a message: it holds the avatar plus the
+   whole content stack (name/time header, reply preview, bubble, reaction
+   chips). `flex-end` is deliberate — the avatar's bottom edge lines up with
+   the bottom of the message instead of floating in the vertical middle,
+   which is what made it look detached on a multi-line bubble. */
+.chat-msg-row {
+    display: flex;
+    align-items: flex-end;
+    justify-content: flex-start;
+    gap: 8px;
+    min-width: 0;
+    width: 100%;
+}
+
+/* `flex: 1 1 auto` + `min-width: 0` lets the bubble grow to the available
+   width yet still shrink, so a long unbroken word wraps instead of forcing
+   the row (and the avatar) off the edge. */
+.chat-msg-content {
+    position: relative;          /* anchor for the overlaid reaction chips */
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    flex: 1 1 auto;
+    min-width: 0;
+    max-width: 100%;
+}
+
+.chat-msg-meta {
+    display: flex;
+    align-items: baseline;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-bottom: 3px;
+    font-size: 0.72rem;
+    color: var(--text-muted);
+}
+
+.chat-msg-name { font-weight: 700; }
+.chat-msg-time { font-weight: 500; }
+
+/* ---- Profiles: avatar + role badge ----
+   The point is to tell HR and superadmin apart at a glance. The ROLE
+   COLOUR is fixed per role (blue = superadmin, green = HR) rather than
+   taken from --color-primary, so the two never look alike. Colours come
+   from shared variables so this still themes with the app. */
+.chat-avatar {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex: 0 0 auto;
+    width: 28px;
+    height: 28px;
+    min-width: 28px;
+    border-radius: 50%;
+    font-size: 0.72rem;
+    font-weight: 700;
+    line-height: 1;
+    letter-spacing: 0;
+    color: #fff;
+    background: var(--chat-avatar-unknown, #64748B);
+    /* Bottom-aligned to the message, NOT centred. `center` left the avatar
+       stranded halfway down a tall multi-line bubble, reading as detached
+       from the text it belongs to. */
+    align-self: flex-end;
+}
+
+.chat-avatar--superadmin {
+    background: var(--chat-role-superadmin, #4A9EFF);
+    /* RANK MARKER — gold ring + corner star, layered on the role fill.
+       ⚠️ This is a marker of RANK, not a second identity colour: the circle
+       stays blue (--chat-role-superadmin) so "one colour = one role" survives.
+       Gold reads as highest rank everywhere and clashes with none of the four
+       role hues. The ring uses box-shadow (not border) so the 28px circle
+       keeps its size, and the star is a ::after so the avatar's markup — and
+       every existing test that pins it — stays untouched. */
+    box-shadow: 0 0 0 2px var(--chat-rank-gold, #F5B301);
+    position: relative;
+}
+.chat-avatar--superadmin::after {
+    content: "\2605"; /* ★ */
+    position: absolute;
+    top: -4px;
+    right: -4px;
+    font-size: 0.55rem;
+    line-height: 1;
+    color: var(--chat-rank-gold, #F5B301);
+    /* Keeps the star readable over any surface, dark or light. */
+    text-shadow: 0 0 2px var(--bg-primary, #fff);
+    pointer-events: none;
+}
+.chat-avatar--hr         { background: var(--chat-role-hr, #16A34A); }
+/* Area Manager (stored role 'owner'). It USED to fall through to the neutral
+   "unknown" grey, which was correct while owners were excluded from chat
+   entirely. Now that they hold 1:1 threads, grey made a real participant look
+   like an unrecognised one — so it gets the same violet the .role-badge.owner
+   uses elsewhere in the app, keeping one colour for one role. */
+.chat-avatar--owner      { background: var(--chat-role-area-manager, #8B5CF6); }
+/* RM/SM (stored role 'rmsm') has its OWN colour (amber) so it is told apart
+   from the Area Manager's violet at a glance. */
+.chat-avatar--rmsm       { background: var(--chat-role-rmsm, #F59E0B); }
+
+/* Optional job title, muted so it never competes with the name. */
+.chat-msg-title {
+    font-size: 0.68rem;
+    font-weight: 500;
+    color: var(--text-muted);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 140px;
+    align-self: center;
+}
+
+/* Consecutive messages from one person: keep the avatar visible but drop
+   the repeated name, so a burst reads as one block. */
+/* Grouped follow-ups hide the repeating name/time header. The AVATAR is
+   deliberately KEPT on grouped messages — it is what tells you the whole
+   burst came from one person. */
+.chat-msg-grouped .chat-msg-meta {
+    margin-bottom: 2px;
+    min-height: 0;
+}
+
+.chat-msg-grouped .chat-msg-name,
+.chat-msg-grouped .chat-msg-title,
+.chat-msg-grouped .chat-role-pill {
+    display: none;
+}
+
+.chat-msg-grouped .chat-msg-bubble {
+    border-top-left-radius: 6px;
+    border-top-right-radius: 6px;
+}
+
+/* ---- Read receipts: the ✓ Sent / ✓✓ Seen ticks ----
+   Shown only on your own messages. A single grey tick means Firestore
+   stored it; the blue double tick means everyone else has read past it.
+   Kept small and low-contrast so it reads as metadata, not content. */
+.chat-msg-ticks {
+    margin-left: 6px;
+    font-size: 0.72rem;
+    font-weight: 700;
+    letter-spacing: -1px;
+    color: var(--text-muted, #9aa0a6);
+    /* Grey until every other participant has read it. */
+    opacity: 0.85;
+    transition: color 0.2s ease;
+}
+
+.chat-msg-ticks.is-seen {
+    color: var(--chat-accent-blue, #4a9eff);   /* Messenger-style read blue */
+    opacity: 1;
+}
+
+/* ---- Replies ---- */
+
+/* Quoted parent above a reply's bubble. A left rule + muted text keeps it
+   clearly secondary to the reply itself. */
+.chat-reply-quote-block {
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+    margin-bottom: 4px;
+    padding: 4px 8px;
+    border-left: 2px solid var(--border-color);
+    border-radius: 0 6px 6px 0;
+    background: var(--bg-secondary);
+    font-size: 0.72rem;
+    max-width: 100%;
+    overflow: hidden;
+}
+
+.chat-reply-quote-name {
+    font-weight: 700;
+    color: var(--text-secondary);
+}
+
+.chat-reply-quote-text {
+    color: var(--text-muted);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+/* The pending-reply banner above the composer. */
+.chat-reply-banner {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+    margin-bottom: 8px;
+    padding: 7px 10px;
+    border-left: 3px solid var(--color-primary);
+    border-radius: 6px;
+    background: var(--bg-secondary);
+    color: var(--text-secondary);
+    font-size: 0.78rem;
+}
+
+.chat-reply-banner[hidden] { display: none; }
+
+.chat-reply-banner .chat-reply-quote {
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+    min-width: 0;
+    flex: 1 1 auto;
+}
+
+.chat-reply-name { font-weight: 700; color: var(--text-primary); }
+
+.chat-reply-text {
+    color: var(--text-muted);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.chat-reply-cancel {
+    flex: 0 0 auto;
+    background: transparent;
+    border: none;
+    color: var(--text-muted);
+    font-size: 1.1rem;
+    line-height: 1;
+    cursor: pointer;
+    padding: 2px 6px;
+    border-radius: 5px;
+}
+
+.chat-reply-cancel:hover { background: var(--bg-card); color: var(--text-primary); }
+
+/* NOTE: there are deliberately no per-message action styles any more. Reply
+   and the reactions both moved into the one shared context menu
+   (.chat-reaction-picker), so a message no longer carries its own icons and
+   the header stays pure metadata. */
+
+/* Reaction chips OVERLAY the message instead of sitting under it.
+   In normal flow they added height to the content column, which in turn
+   dragged the bottom-aligned avatar DOWN so it stopped lining up with the
+   bubble. Absolutely positioned against the content column (whose bottom
+   edge is now the bubble's, because the chips contribute no height) the
+   message keeps its natural size and the avatar stays glued to the
+   bubble. The chips straddle the bubble's bottom edge — half over, half in
+   the 12px gap the log already provides — so nothing is clipped and no
+   extra space appears under the message. */
+.chat-reactions {
+    position: absolute;
+    bottom: -12px;
+    left: 0;
+    z-index: 2;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    max-width: 100%;
+    pointer-events: none;
+}
+
+/* The chips themselves stay clickable even though the overlay container is
+   click-through, so empty space between chips does not swallow taps meant
+   for the message underneath. */
+.chat-reactions > * { pointer-events: auto; }
+
+/* Outgoing messages: the chips hang off the bubble's right edge, matching
+   the right-aligned group. */
+.chat-msg-mine .chat-reactions {
+    left: auto;
+    right: 0;
+}
+
+.chat-reaction-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 2px 7px;
+    font-size: 0.75rem;
+    line-height: 1.5;
+    border: 1px solid var(--border-color);
+    border-radius: 999px;
+    background: var(--bg-secondary);
+    color: var(--text-secondary);
+    cursor: pointer;
+}
+
+.chat-reaction-chip:hover { border-color: var(--color-primary); }
+
+/* Your own reaction is tinted, so it reads as "I acknowledged this". */
+.chat-reaction-chip.is-mine {
+    border-color: var(--color-primary);
+    background: rgba(34, 197, 94, 0.12);
+    color: var(--text-primary);
+}
+
+.chat-reaction-count { font-weight: 700; font-size: 0.7rem; }
+
+.chat-reaction-picker {
+    position: fixed;
+    z-index: 60;
+    /* iMessage layout: a COLUMN — emoji row on top, divider, text action bar
+       below. It now anchors BELOW the held message (see openReactionPicker). */
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding: 8px;
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
+    border-radius: 14px;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18);
+    /* Pops in from slightly below and small, so it reads as arriving from
+       the message it belongs to. Kept short (~140ms): the row is meant to
+       feel instant, not to make the user wait. */
+    transform-origin: top left;
+    animation: chatPickerIn 140ms cubic-bezier(0.2, 0.9, 0.3, 1.2) both;
+    will-change: transform, opacity;
+}
+
+/* The emoji row (top) and the text action bar (bottom) are each their own
+   horizontal flex row, spaced so the buttons read as one grouped control. */
+.chat-picker-reactions,
+.chat-picker-actions {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    gap: 2px;
+}
+
+/* The iMessage-style text actions: Copy · Unsend · Reply. Text, not icons, so
+   they grow to fit the label and stay legible — the whole point of the
+   redesign. */
+.chat-picker-action {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 56px;
+    /* min-height (not a fixed height) keeps a comfortable thumb target without
+       forcing a square icon box the way the old 32×32 did. */
+    min-height: 36px;
+    padding: 0 14px;
+    font-size: 0.9rem;
+    font-weight: 600;
+    line-height: 1;
+    border: none;
+    border-radius: 8px;
+    background: transparent;
+    color: var(--text-secondary);
+    cursor: pointer;
+    white-space: nowrap;
+    transition: transform 90ms ease, background 90ms ease, color 90ms ease;
+}
+
+.chat-picker-action:hover {
+    background: var(--bg-secondary);
+    color: var(--color-primary);
+}
+
+.chat-picker-action:active { transform: scale(0.92); }
+
+/* ⚠️ .chat-picker-action sets display:inline-flex — an AUTHOR rule, which
+   beats the user-agent `[hidden] { display:none }` cascade. So the Unsend
+   button's `hidden` attribute alone left the button VISIBLE on every
+   message, mine or not: syncUnsendButton() toggled the attribute but the
+   pixels never changed. Same trap this codebase already cured for `.btn`
+   (style.css `.btn[hidden]`) and `.icon-btn` (theme.css) — same cure. */
+.chat-picker-action[hidden] { display: none; }
+
+/* Horizontal divider between the reaction row and the text action bar. */
+.chat-picker-divider {
+    width: 100%;
+    height: 1px;
+    margin: 2px 0;
+    background: var(--border-color);
+}
+
+/* Each emoji cascades in behind the panel. The stagger is tiny (18ms) so the
+   row still feels immediate rather than choreographed. The emoji are now the
+   only children of .chat-picker-reactions (children 1-6), so the delays
+   shift to match — the first emoji must still animate. */
+.chat-reaction-picker .chat-reaction-option {
+    animation: chatPickerEmojiIn 120ms cubic-bezier(0.2, 0.9, 0.3, 1.3) both;
+}
+
+.chat-picker-reactions .chat-reaction-option:nth-child(1) { animation-delay: 10ms; }
+.chat-picker-reactions .chat-reaction-option:nth-child(2) { animation-delay: 28ms; }
+.chat-picker-reactions .chat-reaction-option:nth-child(3) { animation-delay: 46ms; }
+.chat-picker-reactions .chat-reaction-option:nth-child(4) { animation-delay: 64ms; }
+.chat-picker-reactions .chat-reaction-option:nth-child(5) { animation-delay: 82ms; }
+.chat-picker-reactions .chat-reaction-option:nth-child(6) { animation-delay: 100ms; }
+
+/* The Unsend action reads as the destructive one, so it takes the danger
+   tint on hover — distinct from Reply's neutral and the emoji row. */
+.chat-picker-unsend:hover {
+    background: var(--color-danger-bg, rgba(239, 68, 68, 0.12));
+    color: var(--color-danger, #ef4444);
+}
+
+/* An UNSENT message: the body is gone, so show a muted placeholder instead.
+   Italic + muted reads as "there was something here" without implying the
+   text. Themes via the shared tokens like everything else in this file. */
+.chat-msg-unsent {
+    font-style: italic;
+    color: var(--text-muted, #94a3b8);
+}
+
+/* --------------------------------------------------------------
+   Unsend confirm modal (phone-friendly). Reuses .modal-overlay's
+   show/hide via .active; only the box and its buttons are new, with
+   big tap targets so it is thumb-friendly on a phone.
+   -------------------------------------------------------------- */
+.chat-unsend-overlay { z-index: 1200; }
+
+.chat-unsend-box {
+    width: min(360px, calc(100vw - 40px));
+    margin: auto;
+    padding: 24px 22px 20px;
+    text-align: center;
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
+    border-radius: 14px;
+    box-shadow: 0 18px 50px rgba(0, 0, 0, 0.28);
+    animation: chatUnsendIn 140ms cubic-bezier(0.2, 0.9, 0.3, 1.2) both;
+}
+
+.chat-unsend-icon {
+    width: 52px;
+    height: 52px;
+    margin: 0 auto 14px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    font-size: 1.25rem;
+    background: var(--color-danger-bg, rgba(239, 68, 68, 0.12));
+    color: var(--color-danger, #ef4444);
+}
+
+.chat-unsend-title {
+    margin: 0 0 8px;
+    font-size: 1.1rem;
+    color: var(--text-primary);
+}
+
+.chat-unsend-body {
+    margin: 0 0 20px;
+    font-size: 0.9rem;
+    line-height: 1.5;
+    color: var(--text-secondary);
+}
+
+.chat-unsend-actions {
+    display: flex;
+    gap: 10px;
+}
+
+/* Full-width, ≥48px tall: comfortable thumbs, no mis-taps. */
+.chat-unsend-actions button {
+    flex: 1 1 0;
+    min-height: 48px;
+    padding: 12px 16px;
+    font-size: 0.95rem;
+    font-weight: 600;
+    border: 1px solid var(--border-color);
+    border-radius: 10px;
+    cursor: pointer;
+    transition: background 90ms ease, color 90ms ease, transform 90ms ease;
+}
+
+.chat-unsend-actions button:active { transform: scale(0.97); }
+
+.chat-unsend-cancel {
+    background: var(--bg-secondary);
+    color: var(--text-primary);
+}
+
+.chat-unsend-cancel:hover { background: var(--bg-tertiary, var(--bg-secondary)); }
+
+.chat-unsend-confirm {
+    background: var(--color-danger, #ef4444);
+    border-color: var(--color-danger, #ef4444);
+    color: #ffffff;
+}
+
+.chat-unsend-confirm:hover { filter: brightness(0.94); }
+
+@keyframes chatUnsendIn {
+    from { opacity: 0; transform: translateY(8px) scale(0.96); }
+    to   { opacity: 1; transform: translateY(0)   scale(1); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .chat-unsend-box { animation: none; }
+}
+
+@keyframes chatPickerIn {
+    from { opacity: 0; transform: translateY(6px) scale(0.88); }
+    to   { opacity: 1; transform: translateY(0)   scale(1); }
+}
+
+@keyframes chatPickerEmojiIn {
+    from { opacity: 0; transform: scale(0.5); }
+    to   { opacity: 1; transform: scale(1); }
+}
+
+/* Respect the OS "reduce motion" setting: no motion, but still fully usable. */
+@media (prefers-reduced-motion: reduce) {
+    .chat-reaction-picker,
+    .chat-reaction-picker .chat-reaction-option,
+    .chat-ticket-chip,
+    .chat-violation-chip {
+        animation: none;
+        transition: none;
+    }
+    /* The long-press focus overlay: the scrim still appears (it is the signal
+       that the menu is open) but without the fade, and the held bubble keeps
+       its lifted z-index so it stays highlighted — just without the pop. */
+    .chat-focus-backdrop,
+    .chat-msg.is-focused .chat-msg-bubble {
+        animation: none;
+    }
+    .chat-msg.is-focused .chat-msg-bubble { transform: scale(1.03); }
+}
+
+.chat-reaction-picker[hidden] { display: none; }
+
+/* --------------------------------------------------------------
+   Long-press focus overlay (MOBILE)
+
+   When a message is held, a full-thread scrim drops over everything
+   and ONLY the pressed bubble is lifted above it, Messenger/iOS
+   style. The scrim is a sibling of .chat-modal-container inside
+   .chat-modal-overlay; that overlay establishes a stacking context
+   (it has backdrop-filter), so the three layers below compete purely
+   by z-index inside it:
+
+       ordinary messages   z: auto   → dimmed + blurred by the scrim
+       .chat-focus-backdrop z: 40    → the dark tint + blur itself
+       .chat-msg.is-focused z: 50    → the held bubble, crisp above it
+       .chat-reaction-picker z: 60   → the action menu, on top of all
+
+   The picker already relies on this exact overlay-rooted stacking,
+   so the scrim and the focused bubble layer correctly beside it with
+   no new containing block anywhere in between.
+   -------------------------------------------------------------- */
+.chat-focus-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 40;
+    background: rgba(0, 0, 0, 0.5);
+    -webkit-backdrop-filter: blur(6px);
+    backdrop-filter: blur(6px);
+    /* Fades up rather than snapping, so the thread recedes smoothly as the
+       held bubble comes forward. */
+    animation: chatFocusScrim 160ms ease both;
+    /* Ships hidden; only the touch long-press path (engageMessageFocus)
+       reveals it, so a desktop hover never dims the thread. */
+}
+.chat-focus-backdrop[hidden] { display: none; }
+
+@keyframes chatFocusScrim {
+    from { opacity: 0; }
+    to   { opacity: 1; }
+}
+
+/* The held bubble is raised out of the dim and given a subtle pop. `position:
+   relative` is what lets z-index apply at all (a static flex child would not
+   take one). The scale lives on the bubble itself, not the whole row, so the
+   avatar/meta line stays put while the message body lifts. */
+.chat-msg.is-focused {
+    position: relative;
+    z-index: 50;
+}
+
+.chat-msg.is-focused .chat-msg-bubble {
+    animation: chatMsgFocusPop 200ms cubic-bezier(0.2, 0.9, 0.3, 1.3) both;
+}
+
+@keyframes chatMsgFocusPop {
+    0%   { transform: scale(1); }
+    55%  { transform: scale(1.06); }
+    100% { transform: scale(1.03); }
+}
+
+.chat-reaction-option {
+    width: 32px;
+    height: 32px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border: none;
+    border-radius: 7px;
+    background: transparent;
+    cursor: pointer;
+    transition: transform 90ms ease, background 90ms ease;
+}
+
+/* The glyph inside a picker option, and inside a chip. Sized here so both
+   places share one rule; the SVG itself is width/height 100%. */
+.chat-reaction-option-glyph,
+.chat-reaction-emoji {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 22px;
+    height: 22px;
+    flex: 0 0 auto;
+}
+
+.chat-reaction-option-glyph { width: 24px; height: 24px; }
+
+/* --------------------------------------------------------------
+   Animated reaction glyphs
+   --------------------------------------------------------------
+   Each reaction is an inline SVG, so it can move in a way a Unicode
+   character never can — a 😂 is a dead picture, a laughing face is not.
+   The six share one flat style so the set looks like a family.
+
+   Motion is CSS-only on purpose: the log's innerHTML is rebuilt on every
+   Firestore snapshot, so anything driven from JS would restart on each
+   update and strobe. */
+.chat-react {
+    display: block;
+    overflow: visible;
+}
+
+/* The picker options animate continuously; the small chips only animate on
+   hover or focus, so a thread full of reactions is not a field of moving
+   faces all at once. */
+.chat-reaction-option .chat-react { animation-duration: 1.4s; animation-iteration-count: infinite; }
+.chat-reaction-chip:hover .chat-react,
+.chat-reaction-chip:focus-visible .chat-react { animation-duration: 1.1s; animation-iteration-count: infinite; }
+
+/* LIKE — a small, satisfied lift. */
+.chat-react--like { animation-name: chatReactLike; }
+@keyframes chatReactLike {
+    0%, 100% { transform: translateY(0) rotate(0deg); }
+    50%      { transform: translateY(-8%) rotate(-5deg); }
+}
+
+/* LOVE — a heartbeat. */
+.chat-react--love { animation-name: chatReactLove; }
+@keyframes chatReactLove {
+    0%, 100% { transform: scale(1); }
+    14%      { transform: scale(1.18); }
+    28%      { transform: scale(1); }
+    42%      { transform: scale(1.12); }
+    56%      { transform: scale(1); }
+}
+
+/* HAHA — the one that has to actually look like laughing: the face bobs,
+   the squinting eyes squeeze shut, and the mouth opens and closes. */
+.chat-react--haha { animation-name: chatReactHaha; }
+@keyframes chatReactHaha {
+    0%, 100% { transform: translateY(0) rotate(0deg); }
+    25%      { transform: translateY(-6%) rotate(-4deg); }
+    50%      { transform: translateY(0) rotate(4deg); }
+    75%      { transform: translateY(-3%) rotate(-2deg); }
+}
+.chat-react--haha .chat-react-mouth {
+    transform-box: fill-box;
+    transform-origin: center top;
+    animation: chatReactLaugh 560ms ease-in-out infinite;
+}
+.chat-react--haha .chat-react-eye {
+    transform-box: fill-box;
+    transform-origin: center;
+    animation: chatReactSquint 560ms ease-in-out infinite;
+}
+@keyframes chatReactLaugh {
+    0%, 100% { transform: scaleY(0.45); }
+    50%      { transform: scaleY(1.15); }
+}
+@keyframes chatReactSquint {
+    0%, 100% { transform: scaleY(1); }
+    50%      { transform: scaleY(0.45); }
+}
+
+/* WOW — a quick startled pop, then hold. */
+.chat-react--wow { animation-name: chatReactWow; }
+@keyframes chatReactWow {
+    0%, 70%, 100% { transform: scale(1); }
+    15%           { transform: scale(1.22); }
+    35%           { transform: scale(0.95); }
+    50%           { transform: scale(1.08); }
+}
+.chat-react--wow .chat-react-mouth {
+    transform-box: fill-box;
+    transform-origin: center;
+    animation: chatReactGasp 1.4s ease-in-out infinite;
+}
+@keyframes chatReactGasp {
+    0%, 70%, 100% { transform: scale(0.8); }
+    20%           { transform: scale(1.15); }
+}
+
+/* SAD — a slow slump, with a tear that keeps falling. */
+.chat-react--sad { animation-name: chatReactSad; }
+@keyframes chatReactSad {
+    0%, 100% { transform: translateY(0) rotate(0deg); }
+    50%      { transform: translateY(5%) rotate(-3deg); }
+}
+.chat-react--sad .chat-react-tear {
+    transform-box: fill-box;
+    transform-origin: center top;
+    animation: chatReactTear 1.4s ease-in infinite;
+}
+@keyframes chatReactTear {
+    0%       { transform: translateY(-4px) scale(0.6); opacity: 0; }
+    25%      { transform: translateY(0) scale(1); opacity: 1; }
+    100%     { transform: translateY(7px) scale(0.7); opacity: 0; }
+}
+
+/* ANGRY — a short, sharp jitter. */
+.chat-react--angry { animation-name: chatReactAngry; }
+@keyframes chatReactAngry {
+    0%, 100% { transform: translateX(0); }
+    20%      { transform: translateX(-7%) rotate(-3deg); }
+    40%      { transform: translateX(7%) rotate(3deg); }
+    60%      { transform: translateX(-5%) rotate(-2deg); }
+    80%      { transform: translateX(5%) rotate(2deg); }
+}
+.chat-react--angry .chat-react-brow {
+    transform-box: fill-box;
+    transform-origin: center;
+    animation: chatReactFrown 1.4s ease-in-out infinite;
+}
+@keyframes chatReactFrown {
+    0%, 100% { transform: translateY(0); }
+    50%      { transform: translateY(1.5px); }
+}
+
+/* Respect the OS "reduce motion" setting: no motion, but still fully usable.
+   The glyphs are still drawn, just still. */
+@media (prefers-reduced-motion: reduce) {
+    .chat-react,
+    .chat-react .chat-react-mouth,
+    .chat-react .chat-react-eye,
+    .chat-react .chat-react-tear,
+    .chat-react .chat-react-brow {
+        animation: none !important;
+    }
+}
+
+.chat-reaction-option:hover { background: var(--bg-secondary); }
+
+/* The emoji I already reacted with — makes "one reaction each" visible in
+   the picker, so re-picking it reads as a toggle-off. */
+.chat-reaction-option.is-current {
+    background: rgba(34, 197, 94, 0.16);
+    box-shadow: inset 0 0 0 1px var(--color-primary);
+}
+
+/* A picked emoji gets a quick "press" acknowledgement. */
+.chat-reaction-option:active { transform: scale(0.86); }
+
+/* ---- "New messages" divider ----
+   Drawn above the oldest unread message so the user does not have to hunt
+   for where the badge's count begins. Uses the danger accent, not the green
+   brand primary, so it reads as a notification marker. */
+.chat-unread-divider {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin: 12px 0 8px;
+    font-size: 0.7rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.6px;
+    color: var(--color-danger, #DC2626);
+}
+
+.chat-unread-divider::before,
+.chat-unread-divider::after {
+    content: "";
+    flex: 1 1 auto;
+    height: 1px;
+    background: currentColor;
+    opacity: 0.35;
+}
+
+/* ---- Paginated history ----
+   The pager sits ABOVE the log so prepending older messages cannot move
+   the control the user is aiming at. */
+.chat-history-bar {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    padding: 8px 14px;
+    border-bottom: 1px solid var(--border-color);
+    background: var(--bg-secondary);
+}
+
+.chat-history-bar[hidden] { display: none; }
+
+.chat-history-status {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+}
+
+/* ---- Profile editor (display name + job title) ---- */
+.chat-header-btn {
+    background: transparent;
+    border: none;
+    color: var(--text-secondary);
+    cursor: pointer;
+    font-size: 0.9rem;
+    padding: 6px 8px;
+    border-radius: 6px;
+    margin-left: auto;
+}
+
+.chat-header-btn:hover {
+    background: var(--bg-secondary);
+    color: var(--color-primary);
+}
+
+.chat-profile-editor {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+    margin-bottom: 8px;
+    padding: 10px;
+    border: 1px solid var(--border-color);
+    border-radius: 10px;
+    background: var(--bg-secondary);
+}
+
+.chat-profile-editor[hidden] { display: none; }
+
+.chat-profile-input {
+    flex: 1 1 140px;
+    min-width: 0;
+    padding: 7px 10px;
+    font-size: 0.85rem;
+    border: 1px solid var(--border-color);
+    border-radius: 7px;
+    background: var(--bg-card);
+    color: var(--text-primary);
+}
+
+.chat-profile-input:focus {
+    outline: none;
+    border-color: var(--color-primary);
+}
+
+/* ---- Mentions ----
+   An @name in a message is highlighted, and a message that mentions YOU
+   gets a tinted border so it stands out while scrolling back.
+
+   BLUE, not the green brand primary: a mention is a direct, personal
+   call-out, so it has to read differently from ordinary text and from the
+   send button. --chat-accent-blue is declared in BOTH style.css (light)
+   and theme.css (dark) so the mention themes automatically with the rest
+   of the app, per the convention at the top of this file — a hardcoded hex
+   here would stay stubbornly blue in dark mode. */
+.chat-mention {
+    color: var(--chat-accent-blue, #1a6fd4);
+    font-weight: 700;
+    background: var(--chat-accent-blue-soft, rgba(74, 158, 255, 0.16));
+    padding: 0 3px;
+    border-radius: 4px;
+}
+
+/* ---- TICKET MENTION CHIP ---------------------------------------------
+   Rendered in place of the words "ticket BNW-TIX007" inside a message, so
+   the reference reads as a link rather than as prose. It is a real <button>,
+   which is why it needs an explicit reset: the app's `.btn` styles do not
+   apply here, but a bare <button> still carries the UA border/background and
+   a focus ring we do want to keep.
+
+   Matched in shape with .chat-violation-chip below (same pill geometry), but
+   DELIBERATELY a different hue per record kind — pale TEAL for tickets — so
+   the two reference types read apart at a glance instead of by glyph alone.
+   The pill is OPAQUE (not the old translucent blue-soft) because that
+   translucent blue was composited over whatever sat behind it — inside the
+   solid blue outgoing bubble it became blue-on-blue and the chip vanished
+   on your OWN messages. Every colour comes from a theme-stable token
+   (declared identically in style.css and theme.css): dark teal on the pale
+   teal pill is 6.7:1 — AA for the ~13px bold label. */
+.chat-ticket-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    margin: 0 1px;
+    padding: 1px 7px;
+    font: inherit;
+    font-size: 0.86em;
+    font-weight: 700;
+    line-height: 1.5;
+    white-space: nowrap;
+    vertical-align: baseline;
+    color: var(--chat-ticket-chip-text, #115E59);
+    background: var(--chat-ticket-chip-bg, #CCFBF1);
+    border: 1px solid var(--chat-ticket-chip-border, #5EEAD4);
+    border-radius: 20px;
+    cursor: pointer;
+    transition: background-color 0.15s ease, border-color 0.15s ease;
+}
+
+.chat-ticket-chip:hover {
+    border-color: var(--chat-ticket-chip-text, #115E59);
+    filter: brightness(0.985);
+}
+
+/* Keyboard users must be able to SEE where they are. */
+.chat-ticket-chip:focus-visible {
+    outline: 2px solid var(--chat-ticket-chip-text, #115E59);
+    outline-offset: 2px;
+}
+
+.chat-ticket-chip i {
+    font-size: 0.9em;
+    opacity: 0.85;
+}
+
+/* ---- VIOLATION CHIP ----------------------------------------------------
+   The matched twin of .chat-ticket-chip above, for a "violation VIO-0007"
+   reference: same pill geometry, but its own hue — pale RED with dark red
+   text — so a report reads apart from a ticket at a glance (the camera
+   glyph matches the Violations tab's fa-video icon). Red here means
+   "report/exception" and collides with no ROLE identity colour.
+
+   ⚠️ History worth keeping: it first shipped as the translucent-blue twin,
+   which VANISHED inside the solid blue outgoing bubble (blue-on-blue on
+   your OWN messages). A solid dark-green pill with white text (5.0:1) was
+   prototyped on the way; the final call is this pale red pill with dark
+   red text — #991B1B on #FEE2E2 is 6.8:1, AA for the ~13px bold label —
+   theme-stable like --chat-bubble-out, opaque so no bubble behind it can
+   tint the background under the text. */
+.chat-violation-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    margin: 0 1px;
+    padding: 1px 7px;
+    font: inherit;
+    font-size: 0.86em;
+    font-weight: 700;
+    line-height: 1.5;
+    white-space: nowrap;
+    vertical-align: baseline;
+    color: var(--chat-violation-chip-text, #991B1B);
+    background: var(--chat-violation-chip-bg, #FEE2E2);
+    border: 1px solid var(--chat-violation-chip-border, #FCA5A5);
+    border-radius: 20px;
+    cursor: pointer;
+    transition: background-color 0.15s ease, border-color 0.15s ease;
+}
+
+.chat-violation-chip:hover {
+    border-color: var(--chat-violation-chip-text, #991B1B);
+    filter: brightness(0.985);
+}
+
+/* Keyboard users must be able to SEE where they are. */
+.chat-violation-chip:focus-visible {
+    outline: 2px solid var(--chat-violation-chip-text, #991B1B);
+    outline-offset: 2px;
+}
+
+.chat-violation-chip i {
+    font-size: 0.9em;
+    opacity: 0.85;
+}
+
+/* The branch / subject line under a ticket row in the picker. */
+.chat-mention-detail {
+    display: block;
+    font-weight: 400;
+    font-size: 0.78em;
+    color: var(--text-muted, #64748b);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.chat-msg-mentions-me .chat-msg-bubble {
+    border-left: 3px solid var(--chat-accent-blue, #4a9eff);
+    box-shadow: 0 0 0 1px var(--chat-accent-blue-soft, rgba(74, 158, 255, 0.35));
+}
+
+/* Autocomplete popup, anchored just above the composer. */
+.chat-mention-menu {
+    position: absolute;
+    bottom: 100%;
+    left: 0;
+    right: 0;
+    margin-bottom: 6px;
+    max-height: 190px;
+    overflow-y: auto;
+    background: var(--bg-card, #fff);
+    border: 1px solid var(--border-color, #d9dde3);
+    border-radius: 10px;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.16);
+    z-index: 30;
+    padding: 4px;
+}
+
+.chat-mention-menu[hidden] { display: none; }
+
+.chat-mention-option {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 10px;
+    border-radius: 7px;
+    cursor: pointer;
+    font-size: 0.9rem;
+    color: var(--text-primary, #1f2937);
+}
+
+.chat-mention-option:hover,
+.chat-mention-option.is-active {
+    background: var(--color-primary, #16a34a);
+    color: #fff;
+}
+
+.chat-mention-at {
+    font-weight: 700;
+    opacity: 0.8;
+}
+
+/* ---- EMPTY PICKER STATE ------------------------------------------------
+   The one non-selectable row shown when a ref picker has a live trigger but
+   nothing to offer — e.g. "@violation" when no report has been transferred to
+   HR. It exists so a correct, permission-limited picker does not look broken:
+   a silent close is indistinguishable from a dead feature.
+
+   It must read as INERT, so it opts out of every affordance the real rows
+   have — no pointer cursor, and no hover/active fill (the selector is listed
+   after the :hover rule above on purpose, and .is-empty is specific enough to
+   win on its own). It carries no data-*-pick attribute, so the mousedown
+   handler ignores it and Enter still sends the message. */
+.chat-mention-option.is-empty {
+    cursor: default;
+    color: var(--text-secondary, #6b7280);
+    font-style: italic;
+}
+
+.chat-mention-option.is-empty:hover,
+.chat-mention-option.is-empty.is-active {
+    background: none;
+    color: var(--text-secondary, #6b7280);
+}
+
+.chat-msg-bubble {
+    padding: 10px 15px;
+    border-radius: 18px;
+    font-size: 0.92rem;
+    line-height: 1.45;
+    /* Long unbroken words/URLs wrap instead of stretching the card. */
+    overflow-wrap: anywhere;
+    white-space: pre-wrap;
+    word-break: break-word;
+    border: 1px solid var(--border-color);
+    background: var(--bg-card);
+    color: var(--text-primary);
+}
+
+/* Own messages: brand-green accent, pushed to the right */
+.chat-msg-mine {
+    align-self: flex-end;
+    align-items: flex-end;
+}
+
+/* Own messages: the avatar moves to the RIGHT of the message so it never
+   sits in the reader's way. Reversing the row keeps the bubble
+   right-aligned without any extra markup, and `justify-content: flex-end`
+   pins the whole group (bubble + avatar + reply preview + reaction chips)
+   to the right edge as one unit. */
+.chat-msg-mine .chat-msg-row {
+    flex-direction: row-reverse;
+    justify-content: flex-end;
+}
+.chat-msg-mine .chat-msg-content { align-items: flex-end; }
+
+.chat-msg-mine .chat-msg-bubble {
+    /* Messenger look: outgoing bubbles are BLUE with white text. The colour is
+       a dedicated theme-stable variable (--chat-bubble-out, declared in BOTH
+       style.css and theme.css), NOT --chat-accent-blue — that one lightens to
+       #7CB8FF in dark mode, which white text could not sit on. White on the
+       #1A6FD4 bubble is 4.6:1 in both themes. */
+    background: var(--chat-bubble-out, #1A6FD4);
+    border-color: var(--chat-bubble-out, #1A6FD4);
+    color: #fff;
+    border-bottom-right-radius: 4px;
+}
+
+/* On my own BLUE bubble a blue @mention would vanish (blue-on-blue). Flip just
+   the outgoing mention to white + underline so a call-out still reads. The base
+   .chat-mention stays blue and themed — this only overrides the blue side, at
+   higher specificity, so the pinned mention-colour test is untouched. */
+.chat-msg-mine .chat-mention {
+    color: #fff;
+    text-decoration: underline;
+}
+
+/* Other people's messages: neutral card, pushed to the left */
+.chat-msg-theirs {
+    align-self: flex-start;
+    align-items: flex-start;
+}
+
+.chat-msg-theirs .chat-msg-bubble {
+    border-bottom-left-radius: 4px;
+}
+
+/* --------------------------------------------------------------
+   Typing indicator ("X is typing…")
+   -------------------------------------------------------------- */
+
+.chat-typing-bar {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    padding: 7px 20px;
+    background: var(--bg-tertiary);
+    border-top: 1px solid var(--border-color);
+    color: var(--text-muted);
+    font-size: 0.8rem;
+    font-style: italic;
+    min-height: 32px;
+}
+
+/* ⚠️ THE HIDDEN BAR TAKES NO SPACE. It used to RESERVE its row
+   (`display: flex; visibility: hidden`), because with the UA default of
+   `display: none` the bar appearing and vanishing resized the composer and
+   shifted the whole thread.
+
+   That reason no longer holds. `.chat-modal-container` is now a FIXED height
+   (`height: min(720px, 82vh)`) and the panes scroll internally — `.chat-log` is
+   the scroll container, with `min-height: 0` carried down the whole flex
+   chain — so the modal CANNOT resize no matter what happens to this row. The
+   reserved space therefore bought nothing and cost a permanent dead band
+   between the last message and the composer: `.chat-thread` is `flex: 1 1 auto`,
+   so those 32px came straight out of the message area.
+
+   So the rule is now simply `display: none`, and the UA default is no longer
+   overridden. The composer shifts by one row's height when someone starts and
+   stops typing — a contained, one-off movement on a real state change, not the
+   old whole-thread resize. chat.js still clears `textContent` when it hides, so
+   nothing stale is left behind, and `display: none` also drops the bar out of
+   the accessibility tree entirely.
+
+   ⚠️ IF THIS EVER REGRESSES to a visible gap, the fix is NOT to re-reserve the
+   row: it is to confirm the modal still has a fixed height. Re-adding the
+   reservation here hides a real layout bug behind a cosmetic band. */
+.chat-typing-bar[hidden] {
+    display: none;
+}
+
+/* Three bouncing dots */
+.chat-typing-dots {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    flex-shrink: 0;
+}
+
+.chat-typing-dots i {
+    width: 5px;
+    height: 5px;
+    border-radius: 50%;
+    background: var(--color-primary);
+    animation: chatTypingBounce 1.2s infinite ease-in-out;
+}
+
+.chat-typing-dots i:nth-child(2) { animation-delay: 0.15s; }
+.chat-typing-dots i:nth-child(3) { animation-delay: 0.3s; }
+
+@keyframes chatTypingBounce {
+    0%, 60%, 100% { transform: translateY(0); opacity: 0.45; }
+    30%           { transform: translateY(-4px); opacity: 1; }
+}
+
+/* Respect users who have asked for less motion. */
+@media (prefers-reduced-motion: reduce) {
+    .chat-typing-dots i { animation: none; opacity: 0.8; }
+}
+
+/* --------------------------------------------------------------
+   Typing pill next to the floating launcher
+
+   This is the part the user actually sees: the in-modal bar is
+   hidden behind the overlay and the chat is CLOSED by default, so
+   without this pill "someone is typing" is invisible.
+   -------------------------------------------------------------- */
+
+.chat-launcher-typing {
+    position: fixed;
+    /* Beside the 54px launcher circle at its bottom-right default
+       (bottom 20px → the circle spans bottom 20–74px; the ~34px-tall
+       pill is centred against it at bottom 30px) and to its LEFT, so it
+       never covers the circle. Once the circle is dragged,
+       positionTypingPill() re-anchors it with inline left/top. */
+    bottom: 30px;
+    right: 84px;
+    z-index: 949;
+
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    max-width: 260px;
+
+    padding: 9px 14px;
+    border-radius: 22px;
+    border: 1px solid var(--border-color);
+
+    background: var(--bg-card);
+    color: var(--text-secondary);
+    font-size: 0.82rem;
+    font-style: italic;
+    font-weight: 500;
+
+    box-shadow: var(--shadow-lg);
+    animation: chatPillIn 0.2s ease;
+}
+
+.chat-launcher-typing[hidden] { display: none; }
+
+@keyframes chatPillIn {
+    from { opacity: 0; transform: translateY(-4px) scale(0.96); }
+    to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+/* Gentle pulse on the chat circle while somebody is typing. */
+.chat-launcher.chat-is-typing {
+    animation: chatLauncherPulse 1.4s infinite ease-in-out;
+}
+
+@keyframes chatLauncherPulse {
+    0%, 100% { box-shadow: 0 8px 30px rgba(15, 23, 42, 0.14); }
+    50%      { box-shadow: 0 8px 30px rgba(114, 191, 106, 0.75); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .chat-launcher.chat-is-typing { animation: none; }
+    .chat-launcher-typing { animation: none; }
+}
+
+@media (max-width: 640px) {
+    .chat-launcher-typing {
+        /* Beside the 48px circle at its mobile default (bottom 14px → the
+           circle spans bottom 14–62px; the pill is centred at bottom 22px). */
+        bottom: 22px;
+        right: 72px;
+        max-width: 190px;
+        font-size: 0.76rem;
+        padding: 8px 12px;
+    }
+}
+
+/* --------------------------------------------------------------
+   Composer
+   -------------------------------------------------------------- */
+
+.chat-composer {
+    display: flex;
+    align-items: flex-end;
+    gap: 10px;
+    padding: 14px 20px;
+    border-top: 1px solid var(--border-color);
+    background: var(--bg-secondary);
+    border-radius: 0;
+    /* Anchors the mention autocomplete popup to the composer rather than
+       to the whole modal (it is position:absolute with bottom:100%). */
+    position: relative;
+}
+
+.chat-input {
+    flex: 1 1 auto;
+    min-height: 44px;
+    max-height: 140px;
+    padding: 11px 18px;
+
+    background: var(--bg-input);
+    color: var(--text-primary);
+    border: 1px solid var(--border-color);
+    /* Pill, Messenger-style */
+    border-radius: 22px;
+
+    font-family: inherit;
+    font-size: 0.92rem;
+    line-height: 1.4;
+    resize: none;
+}
+
+.chat-input:focus {
+    outline: none;
+    border-color: var(--color-primary);
+    box-shadow: 0 0 0 3px var(--color-primary-bg);
+}
+
+.chat-input::placeholder { color: var(--text-muted); }
+
+/* Round, icon-only send button (Messenger style). Tied to the outgoing-bubble
+   blue so the composer reads as one system; the white icon on #1A6FD4 is AA in
+   both themes. */
+.chat-composer .btn {
+    flex: 0 0 auto;
+    width: 44px;
+    height: 44px;
+    padding: 0;
+    border-radius: 50%;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.chat-composer .btn.btn-primary {
+    background: var(--chat-bubble-out, #1A6FD4);
+    border-color: var(--chat-bubble-out, #1A6FD4);
+    color: #fff;
+}
+
+.chat-composer .btn:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+    transform: none;
+    box-shadow: none;
+}
+
+/* --------------------------------------------------------------
+   Responsive
+   -------------------------------------------------------------- */
+
+@media (max-width: 640px) {
+    .chat-launcher {
+        width: 48px;
+        height: 48px;
+        font-size: 1.1rem;
+        bottom: 14px;
+        right: 14px;
+    }
+
+    .chat-modal-container {
+        /* Same rule on a phone: a FIXED height, so the thread cannot resize
+           the window when the typing bar or the reply banner comes and goes. */
+        height: min(720px, 88vh);
+        max-height: 88vh;
+    }
+
+    .chat-msg { max-width: 88%; }
+    .chat-log { padding: 14px; }
+    .chat-composer { padding: 12px 14px; }
+
+    /* Phone tap targets. The text action buttons (Copy · Unsend · Reply) get a
+       comfortable 44px min-height for a thumb; they stay text pills (no fixed
+       square box) so the labels never clip. The emoji row is bumped to 40px. */
+    .chat-picker-action {
+        min-height: 44px;
+        padding: 0 18px;
+        font-size: 1rem;
+    }
+    .chat-reaction-picker .chat-reaction-option {
+        width: 40px;
+        height: 40px;
+    }
+}

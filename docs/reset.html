@@ -1,0 +1,512 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>Project Reset — Jiangnan Command Center</title>
+<style>
+/* Self-contained on purpose. This page must never pull the app's theme or any
+   app module, so it cannot pick up a style change that makes it unreadable —
+   and so nothing it loads can have side effects on the app it is resetting. */
+:root {
+  --bg: #0f172a; --panel: #1e293b; --line: #334155;
+  --text: #e2e8f0; --muted: #94a3b8;
+  --danger: #dc2626; --danger-bg: #7f1d1d;
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0; padding: 24px 16px 64px;
+  background: var(--bg); color: var(--text);
+  font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  line-height: 1.5;
+}
+.wrap { max-width: 780px; margin: 0 auto; }
+h1 { font-size: 1.4rem; margin: 0 0 4px; }
+.sub { color: var(--muted); font-size: 0.88rem; margin-bottom: 24px; }
+.card {
+  background: var(--panel); border: 1px solid var(--line);
+  border-radius: 10px; padding: 18px; margin-bottom: 16px;
+}
+.card h2 { font-size: 0.95rem; margin: 0 0 12px; text-transform: uppercase; letter-spacing: 0.6px; color: var(--muted); }
+label { display: block; font-size: 0.82rem; font-weight: 600; margin-bottom: 5px; }
+input {
+  width: 100%; padding: 10px 12px; margin-bottom: 12px;
+  background: #0b1220; color: var(--text);
+  border: 1px solid var(--line); border-radius: 6px; font-size: 0.9rem;
+}
+input:focus { outline: 2px solid #3b82f6; outline-offset: -1px; }
+button {
+  padding: 10px 16px; border-radius: 6px; border: 1px solid var(--line);
+  background: #334155; color: var(--text); font-size: 0.88rem;
+  font-weight: 600; cursor: pointer;
+}
+button:hover:not(:disabled) { filter: brightness(1.2); }
+button:disabled { opacity: 0.45; cursor: not-allowed; }
+button.primary { background: #1d4ed8; border-color: #2563eb; }
+button.danger { background: var(--danger); border-color: #ef4444; }
+.row { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+.msg { font-size: 0.85rem; margin-top: 10px; min-height: 1.2em; }
+.msg.err { color: #fca5a5; }
+.msg.ok { color: #86efac; }
+table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
+th, td { text-align: left; padding: 7px 8px; border-bottom: 1px solid var(--line); }
+th { color: var(--muted); font-weight: 600; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.4px; }
+td.num { text-align: right; font-variant-numeric: tabular-nums; font-weight: 700; }
+.tag { font-size: 0.68rem; font-weight: 800; letter-spacing: 0.5px; padding: 2px 7px; border-radius: 999px; }
+.tag.sub { background: #422006; color: #fde68a; }
+.note { font-size: 0.8rem; color: var(--muted); margin-top: 10px; }
+.warnbox {
+  background: #422006; border: 1px solid #b45309; color: #fde68a;
+  border-radius: 8px; padding: 12px 14px; font-size: 0.83rem; margin-top: 14px;
+}
+.warnbox strong { display: block; margin-bottom: 4px; }
+#log {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.76rem; line-height: 1.6; white-space: pre-wrap;
+  max-height: 260px; overflow-y: auto; color: var(--muted);
+}
+.hidden { display: none !important; }
+code { background: #0b1220; padding: 1px 5px; border-radius: 4px; font-size: 0.8em; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <h1>Project Reset</h1>
+  <p class="sub">Clears operational data so the app can be handed over or demoed from a clean slate.
+    <strong>Superadmin only. Irreversible.</strong></p>
+
+  <div class="card" id="authCard">
+    <h2>1 &middot; Sign in</h2>
+    <label for="email">Superadmin email</label>
+    <input id="email" type="email" autocomplete="username" placeholder="you@jiangnanhotpot.com">
+    <label for="password">Password</label>
+    <input id="password" type="password" autocomplete="current-password">
+    <div class="row"><button class="primary" id="signInBtn">Sign in</button></div>
+    <div class="msg" id="authMsg"></div>
+  </div>
+
+  <div class="card hidden" id="runCard">
+    <h2>Reset project data</h2>
+    <div class="warnbox">
+      <strong>This permanently deletes Firestore documents.</strong>
+      Tickets, violations, status history, chat rooms and every Area&nbsp;Manager /
+      HR account. It cannot be undone &mdash; take a backup first if you are not certain.
+    </div>
+    <label for="confirmText">Type <code>RESET</code> to enable the button</label>
+    <input id="confirmText" placeholder="RESET" autocomplete="off" spellcheck="false">
+    <div class="row">
+      <button class="danger" id="runBtn" disabled>Reset project data</button>
+      <button id="signOutBtn">Sign out</button>
+    </div>
+    <div class="msg" id="runMsg"></div>
+    <div id="runLog" class="hidden" style="margin-top:12px"><div id="log"></div></div>
+    <div id="summary"></div>
+
+    <!-- These lived on the removed scan screen. They are permanent now, because
+         a one-click tool is exactly where someone skips the small print. -->
+    <div class="warnbox"><strong>Cloudinary files are NOT deleted.</strong>
+      This clears Firestore documents only. Every CCTV clip, photo and PDF attached to a
+      deleted ticket stays in Cloudinary and keeps costing storage.
+    </div>
+    <div class="warnbox"><strong>Chat messages are not individually deleted.</strong>
+      Messages, reactions, receipts, presence and profiles live inside each room and cannot be
+      enumerated by a superadmin. Deleting the room makes them all unreachable, so every chat
+      disappears &mdash; but the documents remain in Firestore as inert orphans.
+    </div>
+  </div>
+
+</div>
+
+<script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
+<script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-firestore.js"></script>
+<script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-auth.js"></script>
+
+<script>
+/* ==========================================================================
+   PROJECT RESET — docs/reset.html
+   ==========================================================================
+
+   WHY THIS FILE IS IN docs/
+   `firebase.json` sets hosting `public: "."`, so ANY .html at the repo root is
+   deployed to the live site. docs/** is already in the hosting ignore list, so
+   a reset button placed here has ZERO deploy surface. Run it locally:
+
+       npm run reset      (or: python -m http.server 5500  ->  /docs/reset.html)
+
+   WHAT IT NEVER TOUCHES — see PROTECTED below. Those exclusions are the whole
+   reason this can be run safely, and they are asserted in
+   test/reset-tool.test.js so they cannot be quietly deleted.
+   ========================================================================== */
+
+/* The collections a reset removes, read straight from Firestore.
+   `userRoles` marks the one that is filtered rather than emptied. */
+var PLAN = [
+    { id: 'tickets',     label: 'Tickets',                    del: true },
+    { id: 'violations',  label: 'Violation reports',          del: true },
+    { id: 'status_logs', label: 'Status history',             del: true },
+    { id: 'chats',       label: 'Chat rooms',                del: true, readable: false },
+    { id: 'users',       label: 'Area Manager / HR / RM/SM accounts', del: 'userRoles' }
+];
+
+/* Roles an account must have to be removed. `superadmin` and `operator` are
+   ABSENT ON PURPOSE — see docs/BOOTSTRAP.md. No account created through the app
+   can ever BE the first superadmin (the UI only assigns owner/hr), so deleting
+   every superadmin would leave the project un-bootstrappable all over again.
+   Operators are absent because they are made directly in Firestore and are not
+   recreatable from the UI either. */
+var DELETE_ROLES = ['owner', 'hr', 'rmsm'];
+
+/* Hard blocklist. Never read, never written, never listed. */
+var PROTECTED = {
+    collections: ['branches', 'counters'],
+    reasons: {
+        branches: 'registration needs a branch, branches need a superadmin, and no ' +
+                  'in-app account can be the first superadmin',
+        counters: 'holds the ticket-number sequences — wiping it issues DUPLICATE ticket numbers'
+    }
+};
+
+/* Chat subcollections. A superadmin cannot READ these inside someone else's
+   private 1:1 thread (canReadChat = membership only), and Firestore has no
+   "delete this collection" primitive — ids must be read first. So they are not
+   individually deletable and deliberately are not attempted. Deleting the PARENT
+   room doc makes every one of them unreachable, because the conversation list
+   queries `chats`. That is the whole chat wipe, with no privacy regression. */
+var CHAT_SUBS = ['messages', 'presence', 'readReceipts', 'reactions', 'profiles'];
+
+var db = null;
+var auth = null;
+
+/* Firestore config is duplicated here on purpose: including firebase.js would
+   pull in the whole app (persistence, listeners, helper globals) for a page whose
+   only job is a handful of .get() calls. The values are asserted equal to
+   firebase.js by test/reset-tool.test.js, so the two cannot drift. */
+var firebaseConfig = {
+  apiKey: "AIzaSyD3R9VtLbqPxPlKXn5QBRdyiwPOrGRdDRE",
+  authDomain: "jn-data-f29ae.firebaseapp.com",
+  projectId: "jn-data-f29ae",
+  storageBucket: "jn-data-f29ae.firebasestorage.app",
+  messagingSenderId: "1067159087911",
+  appId: "1:1067159087911:web:9157cb14590a382a4a1702",
+  measurementId: "G-HR7CJLT7H3"
+};
+
+function $(id) { return document.getElementById(id); }
+function esc(s) {
+  return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
+    return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+  });
+}
+function say(el, text, cls) {
+  el.textContent = text || '';
+  el.className = 'msg' + (cls ? ' ' + cls : '');
+}
+/* ============================ AUTH ============================ */
+
+$('signInBtn').addEventListener('click', function () {
+  var email = $('email').value.trim();
+  var pass = $('password').value;
+  var msg = $('authMsg');
+  if (!email || !pass) return say(msg, 'Enter an email and password.', 'err');
+
+  $('signInBtn').disabled = true;
+  say(msg, 'Signing in...');
+
+  auth.signInWithEmailAndPassword(email, pass)
+    .then(function () { return requireSuperadmin(auth.currentUser); })
+    .then(function () {
+      say(msg, 'Signed in as superadmin.', 'ok');
+      $('authCard').classList.add('hidden');
+      $('runCard').classList.remove('hidden');
+    })
+    .catch(function (e) {
+      say(msg, (e && e.message) || 'Sign-in failed.', 'err');
+    })
+    .then(function () { $('signInBtn').disabled = false; });
+});
+
+/**
+ * The gate. Nothing below this runs for a non-superadmin.
+ *
+ * ⚠️ Reads users/<email>.role — exactly the source isSuperAdmin() uses in
+ * firestore.rules, so this page and the rules can never disagree about who
+ * qualifies. A role this page does not recognise is REFUSED, not guessed: an
+ * unknown role is treated as "not a superadmin", because failing open here would
+ * expose the tool to an account the rules do not consider an admin.
+ */
+function requireSuperadmin(user) {
+  if (!user || !user.email) return Promise.reject(new Error('Not signed in.'));
+  var lower = String(user.email).toLowerCase();
+  return db.collection('users').doc(lower).get().then(function (snap) {
+    if (!snap.exists) {
+      return Promise.reject(new Error('No profile for ' + lower +
+        ' — a superadmin profile must exist before this tool can run.'));
+    }
+    var role = String((snap.data() || {}).role || '').toLowerCase();
+    if (role !== 'superadmin') {
+      return Promise.reject(new Error('Access denied: your role is "' + role +
+        '", not "superadmin". This tool does nothing for any other role.'));
+    }
+    return user;
+  });
+}
+
+/* ============================ RESET ============================ */
+/*
+ * ⚠️ NO SEPARATE SCAN STEP, AND THAT IS A DELIBERATE CHANGE. There used to be a
+ * "Scan project" button whose only job was to count what a reset would remove.
+ * It was one extra step for information that is only actionable BEFORE a wipe
+ * you have already decided to perform — and it added a real hazard: a count read
+ * now and a delete later are two different reads, so they can disagree (a ticket
+ * created in between, a doc removed by someone else), and the safety rule for
+ * accounts would have rested on a decision made in the past.
+ *
+ * So the read that decides what to delete IS the delete's own read — see
+ * deleteQuery() below. There is no second opinion to drift, and the result is
+ * reported afterwards from live counts, which is evidence rather than a
+ * prediction.
+ */
+
+$('confirmText').addEventListener('input', function () {
+  $('runBtn').disabled = $('confirmText').value.trim() !== 'RESET';
+});
+
+$('signOutBtn').addEventListener('click', function () { auth.signOut(); });
+
+$('runBtn').addEventListener('click', function () {
+  if ($('confirmText').value.trim() !== 'RESET') return;
+
+  var msg = $('runMsg');
+  var log = $('log');
+  $('runLog').classList.remove('hidden');
+  log.textContent = '';
+  $('runBtn').disabled = true;
+  $('signOutBtn').disabled = true;
+  say(msg, 'Resetting... do not close this tab.');
+
+  var deleted = 0;
+  function write(line) { log.textContent += line + '\n'; log.scrollTop = log.scrollHeight; }
+
+  /**
+ * Delete EVERY chat room WITHOUT reading the chats collection.
+ *
+ * ⚠️ WHY NOT JUST `db.collection('chats').get()`. Firestore has no "delete this
+ * collection" primitive — ids must be read first — and an unfiltered chats.get()
+ * is REFUSED with "Missing or insufficient permissions" for a superadmin, because
+ * the read rule is membership-based (canReadChat) and the rules deliberately keep
+ * it that way. Widening that rule so the tool could LIST the rooms would expose
+ * every room's `lastMessage` — the last line of a private conversation — to any
+ * superadmin, which is exactly what that rule exists to prevent.
+ *
+ * So the ids are COMPUTED instead. A room id is deterministic: dmRoomIdFor() in
+ * chat.js is `'dm_' + [emailKey(a), emailKey(b)].sort().join('__')` where emailKey
+ * is encodeURIComponent(email.toLowerCase()). Every candidate pair is therefore
+ * derivable from the `users` collection, which a superadmin already reads, and
+ * `allow delete: if isSuperAdmin()` never references `resource` — so the delete
+ * is authorised without the document ever being read.
+ *
+ * Deleting a room id that does not exist is a successful no-op, so generating
+ * every pair is safe: the cost is one write per candidate pair.
+ */
+function deleteChatRooms() {
+  return db.collection('users').get().then(function (snap) {
+    var emails = [];
+    snap.forEach(function (d) {
+      var e = String(d.id || '').toLowerCase();
+      if (e) emails.push(e);
+    });
+    var ids = ['owner-superadmin'];   // the pinned group room is not a pair
+
+    var keyOf = function (email) { return encodeURIComponent(String(email).toLowerCase()); };
+    for (var i = 0; i < emails.length; i++) {
+      for (var j = i + 1; j < emails.length; j++) {
+        var keys = [keyOf(emails[i]), keyOf(emails[j])].sort();
+        ids.push('dm_' + keys[0] + '__' + keys[1]);
+      }
+    }
+
+    var CHUNK = 400;
+    var n = 0;
+    function next() {
+      if (n >= ids.length) return Promise.resolve();
+      var batch = db.batch();
+      var slice = ids.slice(n, n + CHUNK);
+      slice.forEach(function (id) { batch.delete(db.collection('chats').doc(id)); });
+      n += slice.length;
+      return batch.commit()
+        .then(function () { write('  chat rooms: ' + n + '/' + ids.length + ' candidates'); return next(); })
+        .catch(function (e) { throw new Error('chat rooms failed after ' + n + ': ' + e.message); });
+    }
+    return next().then(function () {
+      write('  chat rooms: cleared (' + emails.length + ' accounts)');
+      // Candidates, not confirmed rooms: most pairs never had one. The honest
+      // number for the summary is 0, because a delete of a missing doc is a no-op.
+      return 0;
+    });
+  });
+}
+
+  /**
+   * Delete a query's documents in batches.
+   *
+   * ⚠️ WHY WE RE-QUERY INSTEAD OF TRUSTING THE SCAN. The scan may be a minute old.
+   * Re-reading means a ticket created in between is not silently left behind, a
+   * document deleted meanwhile is not reported as a failure, and — the part that
+   * matters — the users predicate below is evaluated on FRESH data, so the role
+   * protection never depends on this page remembering an earlier decision.
+   */
+  function deleteQuery(coll, predicate, label, done) {
+    return coll.get().then(function (snap) {
+      var docs = [];
+      snap.forEach(function (d) {
+        if (!predicate || predicate(d.data() || {})) docs.push(d);
+      });
+      if (!docs.length) { write('  ' + label + ': nothing to delete'); return done(0); }
+
+      var CHUNK = 400;   // Firestore caps a commit at 500 operations; stay under.
+      var i = 0;
+      function next() {
+        if (i >= docs.length) return done(docs.length);
+        var batch = db.batch();
+        var slice = docs.slice(i, i + CHUNK);
+        slice.forEach(function (d) { batch.delete(d.ref); });
+        i += slice.length;
+        return batch.commit()
+          .then(function () { write('  ' + label + ': ' + i + '/' + docs.length); return next(); })
+          .catch(function (e) {
+            throw new Error(label + ' failed after ' + (i - slice.length) + ' deleted: ' + e.message);
+          });
+      }
+      return next();
+    });
+  }
+
+  // ⚠️ ONE COLLECTION FAILING MUST NOT ABORT THE REST.
+  //
+  // The first run died on the chats collection with "Missing or insufficient
+  // permissions" and STOPPED — so tickets, violations and status history were
+  // deleted and the Area Manager / HR accounts were never reached. A reset that
+  // half-succeeds without naming what it skipped is worse than one that reports
+  // exactly which parts are blocked, because the operator cannot tell "there was
+  // nothing left" from "it never ran".
+  //
+  // Every step is therefore isolated: a rejection is recorded and the run
+  // CONTINUES. A permission-denied is also the signature of un-deployed rules, so
+  // that case gets its own message naming the fix instead of Firestore's wording.
+  var failures = [];
+
+  function step(label, collName, predicate) {
+    return deleteQuery(db.collection(collName), predicate, label, function (n) { deleted += n; return n; })
+      .catch(function (e) {
+        var denied = /permission/i.test(e.message || '');
+        failures.push(label + (denied ? ' — blocked by Firestore rules' : ''));
+        write('  ' + label + ': ' + (denied ? 'BLOCKED (see note below)' : 'FAILED') + ' — ' + e.message);
+      });
+  }
+
+  // The superadmin gate is re-checked immediately before the FIRST write.
+  requireSuperadmin(auth.currentUser).then(function () {
+    write('Reset started ' + new Date().toLocaleString());
+    write('');
+
+    return step('tickets', 'tickets', null)
+      .then(function () { return step('violations', 'violations', null); })
+      .then(function () { return step('status_logs', 'status_logs', null); })
+      .then(function () {
+        // ⚠️ NOT step()'s deleteQuery path: chats cannot be READ, only computed.
+        return deleteChatRooms().catch(function (e) {
+          var denied = /permission/i.test(e.message || '');
+          failures.push('chat rooms' + (denied ? ' — blocked by Firestore rules' : ''));
+          write('  chat rooms: ' + (denied ? 'BLOCKED (see note below)' : 'FAILED') + ' — ' + e.message);
+        });
+      })
+      .then(function () {
+        // ⚠️ THE SAFETY RULE, RE-EVALUATED HERE. Not "delete the accounts the scan
+        // listed" but "delete any account whose role is owner/hr". A superadmin or
+        // an operator cannot be removed by this path even if something changed
+        // between the scan and now — or if a bug above handed us the wrong query.
+        return step('Area Manager / HR / RM/SM accounts', 'users', function (data) {
+          return DELETE_ROLES.indexOf(String(data.role || '').toLowerCase()) > -1;
+        });
+      });
+  }).then(function () {
+    write('');
+    if (failures.length) {
+      write('COMPLETED WITH SKIPS — ' + deleted + ' document(s) deleted, but these were skipped:');
+      failures.forEach(function (f) { write('  - ' + f); });
+      write('');
+      write('A "blocked" entry means the Firestore rules do not yet grant this tool permission.');
+      write('The chats collection needs two rule changes (superadmin read + superadmin delete).');
+      write('Deploy them with:  firebase deploy --only firestore:rules');
+      say(msg, 'Finished with skips — ' + failures.length +
+        ' collection(s) blocked. See the log for the deploy command.', 'err');
+    } else {
+      write('DONE — ' + deleted + ' document(s) deleted.');
+      write('');
+      write('KEPT: ' + PROTECTED.collections.join(', ') + ', and every superadmin/operator account.');
+      say(msg, 'Reset complete. ' + deleted + ' document(s) deleted. Sign out before handing the project over.', 'ok');
+    }
+    renderSummary(deleted, failures);
+  }).catch(function (e) {
+    write('');
+    write('STOPPED: ' + ((e && e.message) || e));
+    say(msg, 'Stopped: ' + ((e && e.message) || e), 'err');
+  }).then(function () {
+    $('runBtn').disabled = false;
+    $('signOutBtn').disabled = false;
+    $('confirmText').value = '';
+  });
+});
+
+/**
+ * What actually got removed, reported AFTER the run from live counts.
+ *
+ * ⚠️ WHY AFTER, NOT BEFORE. The scan step used to print this table up front.
+ * Showing it afterwards means the numbers are EVIDENCE of the result rather than
+ * a prediction made by an earlier read — which is the other reason the separate
+ * scan pass was dropped.
+ */
+function renderSummary(deleted, failures) {
+  var skipped = (failures || []).map(function (f) { return f.split(' —')[0]; });
+
+  // ⚠️ `readable: false` entries are NOT counted. The chats read is refused for
+  // a superadmin by design, so asking for a remaining-count would throw and
+  // report "blocked" for a collection the reset has just successfully cleared —
+  // a misleading result produced by the reporting code, not the reset.
+  Promise.all(PLAN.map(function (p) {
+    if (p.readable === false) return Promise.resolve({ p: p, left: null });
+    return db.collection(p.id).get()
+      .then(function (s) { return { p: p, left: s.size }; })
+      .catch(function () { return { p: p, left: null }; });
+  })).then(function (rows) {
+    var html = '<table style="margin-top:16px"><thead><tr><th>Collection</th>'
+      + '<th style="text-align:right">Remaining</th></tr></thead><tbody>';
+    rows.forEach(function (r) {
+      var unreadable = r.left === null;
+      var blocked = unreadable && skipped.indexOf(r.p.label) > -1;
+      html += '<tr><td>' + esc(r.p.label) + '</td><td class="num">'
+        + (unreadable ? (blocked ? 'blocked' : 'cleared \\u00b7 cannot verify') : r.left)
+        + '</td></tr>';
+    });
+    html += '</tbody></table>';
+    html += '<div class="note"><strong>' + deleted + '</strong> document(s) deleted in total.</div>';
+    html += '<div class="note">Always kept: ' + esc(PROTECTED.collections.join(', '))
+      + ', and every superadmin / operator account.</div>';
+    $('summary').innerHTML = html;
+  }).catch(function () { /* the log already tells the story */ });
+}
+
+/* ============================ BOOT ============================ */
+
+try {
+  firebase.initializeApp(firebaseConfig);
+  db = firebase.firestore();
+  auth = firebase.auth();
+} catch (e) {
+  say($('authMsg'), 'Firebase failed to start: ' + e.message, 'err');
+}
+</script>
+</body>
+</html>
