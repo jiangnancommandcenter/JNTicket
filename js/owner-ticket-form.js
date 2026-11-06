@@ -681,6 +681,7 @@ function renderGrid() {
         function doUpload(f) {
             var data = new FormData();
             data.append('file', f);
+            data.append('upload_preset', CLOUDINARY_UPLOAD_PRESET);
             // Unique public_id so same-named files with different extensions don't
         // overwrite each other in Cloudinary.
         data.append('public_id', makeUniquePublicId(f.name));

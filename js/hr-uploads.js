@@ -44,6 +44,11 @@
     function watchPresence() {
         if (presenceUnsub) return;
         if (!window.db || typeof window.db.collection !== 'function') return;
+        if (typeof window.getOwnerRole === 'function') {
+            var role = String(window.getOwnerRole() || '').toLowerCase();
+            var isSuperAdmin = role === 'superadmin';
+            if (role !== 'hr' && !isSuperAdmin) return;
+        }
         try {
             presenceUnsub = window.db.collection('hr_uploads').onSnapshot(function (snap) {
                 notedKeys = new Set();

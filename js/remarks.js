@@ -67,10 +67,18 @@
         }
     }
 
-    /** Start the single collection-wide presence listener (idempotent). */
+    /** Start the single collection-wide presence listener (idempotent).
+     * Only HR and superadmin may read the remarks collection; store roles
+     * (Area Manager / RM/SM / operator) are denied by firestore.rules, so
+     * skip the listener entirely for them instead of logging a refused read.
+     */
     function watchPresence() {
         if (presenceUnsub) return;
         if (!window.db || typeof window.db.collection !== 'function') return;
+        if (typeof window.getOwnerRole === 'function') {
+            var role = String(window.getOwnerRole() || '').toLowerCase();
+            if (role !== 'hr' && role !== 'superadmin') return;
+        }
         try {
             presenceUnsub = window.db.collection('remarks').onSnapshot(function (snap) {
                 notedKeys = new Set();

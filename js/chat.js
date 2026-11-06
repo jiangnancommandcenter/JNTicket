@@ -1848,8 +1848,13 @@
             // These roles have no paired peer → their roster is empty.
             // `rosterWantedRoles()` returns [] for them, so the read resolves
             // empty and the directory simply stays empty.
+            // ⚠️ Guard against an empty `in` array — Firestore rejects
+            // `where('role','in',[])` with "A non-empty array is required".
             if (currentRole === 'owner' || currentRole === 'rmsm') {
-                source = source.where('role', 'in', rosterWantedRoles());
+                var wantedRoles = rosterWantedRoles();
+                if (wantedRoles.length > 0) {
+                    source = source.where('role', 'in', wantedRoles);
+                }
             } else if (currentRole !== 'superadmin') {
                 source = source.where('role', '==', 'superadmin');
             }
