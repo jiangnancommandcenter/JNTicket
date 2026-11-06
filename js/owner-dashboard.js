@@ -422,29 +422,21 @@ function syncNewTicketButton() {
   ownerNewTicketBtn.title = show ? 'Submit an incident ticket' : '';
 }
 
-/** Reveal + wire the header chat trigger (#cmdPaletteBtn) only when chat is
- * actually available for the signed-in role. Wiring is duplicate-guarded so a
- * re-role in another tab never stacks click handlers. */
+/** Wire the header chat trigger (#cmdPaletteBtn) click on mobile only.
+ * Visibility is controlled by the mobile media query in ownerdashboard.html
+ * (#cmdPaletteBtn[hidden] { display: inline-flex } at <=899px). Desktop keeps
+ * the floating chat launcher and never shows this button. Wiring is
+ * duplicate-guarded so a re-role in another tab never stacks handlers. */
 function syncChatTrigger(enabled) {
   const btn = document.getElementById('cmdPaletteBtn');
   if (!btn) return;
-  if (enabled) {
-    btn.hidden = false;
-    btn.classList.remove('u-hidden');
-    btn.removeAttribute('aria-hidden');
-    btn.title = 'Open chat';
-    if (!btn.dataset.chatWired) {
-      btn.dataset.chatWired = '1';
-      btn.addEventListener('click', function () {
-        if (window.ChatService && typeof window.ChatService.open === 'function') {
-          window.ChatService.open();
-        }
-      });
-    }
-  } else {
-    btn.hidden = true;
-    btn.classList.add('u-hidden');
-    btn.setAttribute('aria-hidden', 'true');
+  if (enabled && !btn.dataset.chatWired) {
+    btn.dataset.chatWired = '1';
+    btn.addEventListener('click', function () {
+      if (window.ChatService && typeof window.ChatService.open === 'function') {
+        window.ChatService.open();
+      }
+    });
   }
 }
 

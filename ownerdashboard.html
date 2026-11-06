@@ -1255,56 +1255,49 @@
         }
     </style>
     <!-- ================================================================
-       CHAT + TICKET — mobile-friendly header triggers
+       CHAT + TICKET — mobile-only header triggers (<=899px)
        ================================================================
-       Chat now opens from #cmdPaletteBtn in the header instead of a
-       floating bottom-right circle (which collides with phone keyboards
-       and viewport edges). The launcher is hidden on this page only.
-       The +Ticket button becomes a floating bubble (FAB) for the Area
-       Manager / RM/SM only — it ships hidden/u-hidden and is revealed
-       by syncNewTicketButton() once the role resolves. -->
+       On phones the chat trigger moves into the header (#cmdPaletteBtn)
+       instead of a floating bottom-right circle. The +Ticket button
+       becomes a floating bubble (FAB) for the Area Manager / RM/SM only.
+       Desktop keeps the original floating chat launcher. -->
     <style>
-        /* Hide the old floating chat launcher; chat is triggered from the
-           header #cmdPaletteBtn button instead. !important wins over the
-           runtime els.launcher.hidden = false in js/chat.js. */
-        .chat-launcher { display: none !important; }
-
-        /* +Ticket floating bubble (FAB). Relies on .btn { display: inline-flex }
-           for layout, so the UA [hidden] rule and .btn[hidden] still hide it
-           while the role is unresolved — no author `display` override here. */
-        #btnOwnerNewTicket {
-            position: fixed;
-            bottom: 22px;
-            right: 22px;
-            z-index: 960;
-            width: 54px;
-            height: 54px;
-            min-width: 54px;
-            min-height: 54px;
-            border-radius: 50%;
-            padding: 0;
-            align-items: center;
-            justify-content: center;
-            box-shadow: var(--shadow-lg, 0 8px 26px rgba(114, 191, 106, 0.5));
-            transition: var(--transition);
-        }
-        #btnOwnerNewTicket span { display: none; }
-        #btnOwnerNewTicket .fa-plus { font-size: 1.4rem; }
-        #btnOwnerNewTicket:hover { transform: translateY(-2px) scale(1.04); }
-        #btnOwnerNewTicket:focus-visible {
-            outline: 2px solid var(--color-primary);
-            outline-offset: 3px;
-        }
         @media (max-width: 899px) {
+            /* Hide the floating chat launcher on mobile; chat opens from the
+               header #cmdPaletteBtn button instead. !important wins over the
+               runtime els.launcher.hidden = false in js/chat.js. */
+            .chat-launcher { display: none !important; }
+
+            /* Reveal the header chat trigger on mobile despite the `hidden`
+               attribute. Visibility is controlled by CSS; JS wires the click. */
+            #cmdPaletteBtn[hidden] { display: inline-flex !important; }
+
+            /* +Ticket floating bubble (FAB) on mobile only. Relies on .btn
+               { display: inline-flex } for layout, so the UA [hidden] rule
+               and .btn[hidden] still hide it while the role is unresolved. */
             #btnOwnerNewTicket {
+                position: fixed;
                 bottom: 16px;
                 right: 14px;
+                z-index: 960;
                 width: 48px;
                 height: 48px;
                 min-width: 48px;
                 min-height: 48px;
+                border-radius: 50%;
+                padding: 0;
+                align-items: center;
+                justify-content: center;
+                box-shadow: var(--shadow-lg, 0 8px 26px rgba(114, 191, 106, 0.5));
+                transition: var(--transition);
             }
+            #btnOwnerNewTicket span { display: none; }
             #btnOwnerNewTicket .fa-plus { font-size: 1.25rem; }
+            #btnOwnerNewTicket:hover { transform: translateY(-2px) scale(1.04); }
+            #btnOwnerNewTicket:focus-visible {
+                outline: 2px solid var(--color-primary);
+                outline-offset: 3px;
+            }
         }
     </style>
 </head>
@@ -1393,18 +1386,6 @@
             </div>
             <div class="header-right">
                 <div class="header-actions">
-                    <!-- ===== CHAT TRIGGER ====
-                         Opens the HR <-> superadmin / Area Manager <-> RM/SM chat
-                         modal (js/chat.js). Lives in the header so it is always
-                         reachable on phones instead of a floating bottom-right
-                         circle that collides with the keyboard and the viewport
-                         edge. Ships `hidden` and is revealed only once chat init
-                         succeeds for the signed-in role (see
-                         syncChatTrigger() in js/owner-dashboard.js). -->
-                    <button type="button" class="icon-btn cmd-palette-btn" id="cmdPaletteBtn" aria-label="Open chat" title="Chat">
-                        <i class="fas fa-comments" aria-hidden="true"></i>
-                    </button>
-
                     <!-- ===== AREA MANAGER: "+Ticket" =====
                          Floating bubble (FAB) for the Area Manager (stored role
                          'owner') and RM/SM ('rmsm') only. It raises tickets for
@@ -1436,6 +1417,16 @@
                     <button type="button" class="btn btn-primary btn-add" id="btnOwnerNewTicket" hidden>
                         <i class="fas fa-plus"></i>
                         <span>Ticket</span>
+                    </button>
+                    <!-- ===== CHAT TRIGGER (MOBILE ONLY) ====
+                         On phones the chat trigger lives in the header instead of a
+                         floating bottom-right circle (which collides with the
+                         keyboard and viewport edge). Ships `hidden`; the mobile
+                         media query in the inline <style> below reveals it on
+                         <=899px. js/owner-dashboard.js wires the click once chat
+                         init succeeds for the signed-in role. -->
+                    <button type="button" class="icon-btn cmd-palette-btn" id="cmdPaletteBtn" hidden aria-label="Open chat" title="Chat">
+                        <i class="fas fa-comments" aria-hidden="true"></i>
                     </button>
                     <button type="button" class="icon-btn" data-theme-toggle aria-label="Switch to dark mode" title="Switch to dark mode">
                         <i class="fas fa-moon"></i>
