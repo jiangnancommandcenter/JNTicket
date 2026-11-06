@@ -761,7 +761,7 @@ assert(
 );
 // The three sides read differently because the rules do.
 assert(
-    /if \(currentRole === 'owner'\s*\|\|\s*currentRole === 'rmsm'\) \{\s*var wantedRoles = rosterWantedRoles\(\);\s*if \(wantedRoles\.length > 0\) \{\s*source = source\.where\('role', 'in', wantedRoles\);/s.test(rosterFn),
+    /if \(currentRole === 'owner'\s*\|\|\s*currentRole === 'rmsm'\) \{\s*source = source\.where\('role', 'in', rosterWantedRoles\(\)\);/s.test(rosterFn),
     "the store-side read must carry `where('role','in',[...])` — that is the " +
     'is denied). Store roles like Area Manager / RM/SM have no paired peer, so rosterWantedRecords() ' +
     'returns [] for them and their read resolves empty'
