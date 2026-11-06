@@ -526,9 +526,19 @@ function renderGrid() {
                 // ⚠️ Wait for metadata so videoWidth/videoHeight/duration are populated.
                 // Without this they are 0, canvas is 0×0, nothing gets drawn,
                 // and the recorder stops almost immediately.
-                await new Promise(function (resolve) {
-                    if (video.readyState >= 1) resolve();
-                    else video.onloadedmetadata = resolve;
+                await new Promise(function (resolve, reject) {
+                    if (video.readyState >= 1) { resolve(); return; }
+                    var metaTimedOut = false;
+                    var metaTimer = setTimeout(function () {
+                        metaTimedOut = true;
+                        reject(new Error('video metadata load timeout'));
+                    }, 10000);
+                    video.onloadedmetadata = function () {
+                        if (!metaTimedOut) {
+                            clearTimeout(metaTimer);
+                            resolve();
+                        }
+                    };
                 });
 
                 var duration = video.duration;
@@ -658,6 +668,16 @@ function renderGrid() {
                     '→', (compressed.size / 1024 / 1024).toFixed(2), 'MB');
                 return compressed.size < file.size ? compressed : file;
             } catch (e) {
+                // Clean up any video element we created so re-uploads don't
+                // accumulate locked media resources (freeze cause).
+                try {
+                    if (video) {
+                        URL.revokeObjectURL(video.src);
+                        video.load();
+                        video.pause();
+                        video.src = '';
+                    }
+                } catch (e2) { /* best effort */ }
                 console.warn('[VideoCompress] Skipping compression:', e.message);
                 return file;
             }
