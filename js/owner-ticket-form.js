@@ -509,13 +509,181 @@ function renderGrid() {
         return safeBase + '-' + suffix;
     }
 
+    function compressVideoBeforeUpload(file, onProgress) {
+        // Non-videos and small videos return immediately (synchronously) so
+        // the upload XHR fires on the same call stack — no microtask delay.
+        if (!file.type.startsWith('video/')) return file;
+        if (file.size <= 5 * 1024 * 1024) return file;
+
+        // Videos larger than 5 MB: compress asynchronously.
+        return (async function () {
+            try {
+                var video = document.createElement('video');
+                video.muted = true;
+                video.playsInline = true;
+                video.src = URL.createObjectURL(file);
+
+                // ⚠️ Wait for metadata so videoWidth/videoHeight/duration are populated.
+                // Without this they are 0, canvas is 0×0, nothing gets drawn,
+                // and the recorder stops almost immediately.
+                await new Promise(function (resolve) {
+                    if (video.readyState >= 1) resolve();
+                    else video.onloadedmetadata = resolve;
+                });
+
+                var duration = video.duration;
+                // Safety: if duration is invalid or infinite, use a sane default
+                if (!duration || duration === Infinity) duration = 60;
+
+                // Target size: ~2/3 of original (e.g. 90MB → ~60MB).
+                var originalSizeMB = file.size / (1024 * 1024);
+                var targetSizeMB = Math.max(originalSizeMB * (2 / 3), 1);
+                var targetBits = targetSizeMB * 8 * 1024 * 1024;
+                var bitrate = Math.floor(targetBits / duration);
+                // Guardrails: prevent quality collapse on short clips, and prevent
+                // a compressed output larger than the original on already-efficient video.
+                var minBitrate = 300 * 1000;   // 300 kbps floor
+                var maxBitrate = 8 * 1000 * 1000; // 8 Mbps ceiling
+                bitrate = Math.max(minBitrate, Math.min(bitrate, maxBitrate));
+
+                // Use original resolution — do not downscale.
+                var canvas = document.createElement('canvas');
+                canvas.width = video.videoWidth;
+                canvas.height = video.videoHeight;
+                var ctx = canvas.getContext('2d');
+
+                // Build a stream that preserves the original frame rate (no forced FPS)
+                // and includes the original audio track so audio + sync are preserved.
+                var videoStream = canvas.captureStream();
+                var stream = new MediaStream(videoStream.getVideoTracks());
+
+                // Capture audio from the video element so it is preserved in the output.
+                try {
+                    var audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+                    if (audioCtx.state === 'suspended') {
+                        await audioCtx.resume();
+                    }
+                    var mediaElementSource = audioCtx.createMediaElementSource(video);
+                    var audioDest = audioCtx.createMediaStreamDestination();
+                    mediaElementSource.connect(audioDest);
+                    for (var i = 0; i < audioDest.stream.getAudioTracks().length; i++) {
+                        stream.addTrack(audioDest.stream.getAudioTracks()[i]);
+                    }
+                } catch (e) {
+                    // Audio capture is optional — proceed with video-only if it fails.
+                    console.warn('[VideoCompress] Audio capture skipped:', e.message);
+                }
+
+                var recorder = new MediaRecorder(stream, {
+                    mimeType: 'video/webm; codecs=vp9',
+                    videoBitsPerSecond: bitrate
+                });
+
+                var chunks = [];
+                recorder.ondataavailable = function (e) { if (e.data.size > 0) chunks.push(e.data); };
+
+                var finished = false;
+                var startTime = performance.now();
+                var animationFrameId = null;
+                var timeoutId = null;
+
+                // Safety timeout: stop after duration + 10 seconds so a stuck
+                // video never freezes the upload forever.
+                var maxTime = duration * 1000 + 10000;
+
+                var draw = function () {
+                    if (finished) return;
+                    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+                    var elapsed = (performance.now() - startTime) / 1000;
+                    var pct = Math.min(100, Math.round((elapsed / duration) * 100));
+                    if (typeof onProgress === 'function') onProgress(pct);
+                    if (elapsed >= duration || video.ended) {
+                        finished = true;
+                        if (animationFrameId) cancelAnimationFrame(animationFrameId);
+                        if (timeoutId) clearTimeout(timeoutId);
+                        recorder.stop();
+                    } else {
+                        animationFrameId = requestAnimationFrame(draw);
+                    }
+                };
+
+                await new Promise(function (resolve, reject) {
+                    recorder.onstop = resolve;
+                    recorder.onerror = reject;
+
+                    // Safety timeout: force-stop the recorder if it runs too long.
+                    timeoutId = setTimeout(function () {
+                        if (!finished) {
+                            finished = true;
+                            if (animationFrameId) cancelAnimationFrame(animationFrameId);
+                            recorder.stop();
+                        }
+                    }, maxTime);
+
+                    recorder.start();
+
+                    // ⚠️ Await video.play() so the video actually plays during
+                    // compression instead of freezing on frame 0 when autoplay is blocked.
+                    video.play().then(function () {
+                        draw();
+                    }).catch(function () {
+                        // Autoplay blocked — start drawing anyway; canvas may still capture frames.
+                        draw();
+                    });
+                });
+
+                // Ensure the encoder flushes any final chunk before we build the blob.
+                await new Promise(function (resolve) { setTimeout(resolve, 0); });
+
+                var blob = new Blob(chunks, { type: 'video/webm' });
+                if (!blob || blob.size === 0) {
+                    URL.revokeObjectURL(video.src);
+                    video.load();
+                    video.pause();
+                    console.warn('[VideoCompress] Empty compressed output, returning original.');
+                    return file;
+                }
+
+                URL.revokeObjectURL(video.src);
+                video.load(); // release video resources so the file is not locked
+                video.pause();
+
+                var compressed = new File([blob], file.name, {
+                    type: 'video/webm',
+                    lastModified: file.lastModified
+                });
+
+                console.log('[VideoCompress] Compressed:', file.name,
+                    '→', (file.size / 1024 / 1024).toFixed(2), 'MB',
+                    '→', (compressed.size / 1024 / 1024).toFixed(2), 'MB');
+                return compressed.size < file.size ? compressed : file;
+            } catch (e) {
+                console.warn('[VideoCompress] Skipping compression:', e.message);
+                return file;
+            }
+        })();
+    }
+
     function uploadToCloudinary(file, done) {
-        var data = new FormData();
-        data.append('file', file);
-        data.append('upload_preset', CLOUDINARY_UPLOAD_PRESET);
-        // Unique public_id so same-named files with different extensions don't
+        var uploadFile = compressVideoBeforeUpload(file, function (pct) {
+            setProgress(pct); // compression progress (0-100) before upload starts
+        });
+
+        // If compression returned a Promise (video), wait for it before uploading.
+        if (uploadFile && typeof uploadFile.then === 'function') {
+            uploadFile.then(function (resolvedFile) {
+                doUpload(resolvedFile);
+            });
+        } else {
+            doUpload(uploadFile);
+        }
+
+        function doUpload(f) {
+            var data = new FormData();
+            data.append('file', f);
+            // Unique public_id so same-named files with different extensions don't
         // overwrite each other in Cloudinary.
-        data.append('public_id', makeUniquePublicId(file.name));
+        data.append('public_id', makeUniquePublicId(f.name));
         var xhr = new XMLHttpRequest();
         xhr.open('POST', 'https://api.cloudinary.com/v1_1/' + CLOUDINARY_CLOUD_NAME + '/auto/upload');
         xhr.upload.onprogress = function (e) {
@@ -542,14 +710,14 @@ function renderGrid() {
                 done(true, {
                     url: payload.secure_url,
                     publicId: payload.public_id,
-                    fileName: file.name,
+                    fileName: f.name,
                     secure_url: payload.secure_url,
                     public_id: payload.public_id,
                     name: file.name,
                     resource_type: payload.resource_type || '',
                     format: payload.format || '',
-                    mimeType: payload.resource_type === 'video' ? 'video/mp4' : (file.type || 'application/octet-stream'),
-                    bytes: file.size,
+                    mimeType: payload.resource_type === 'video' ? 'video/webm' : (f.type || 'application/octet-stream'),
+                    bytes: f.size,
                     uploadedAt: new Date().toISOString()
                 });
             } catch (err) {
@@ -559,6 +727,7 @@ function renderGrid() {
         };
         xhr.onerror = function () { done(false, null); };
         xhr.send(data);
+        }
     }
 
     function resetForm(clearIdentity) {

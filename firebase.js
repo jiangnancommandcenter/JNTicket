@@ -585,7 +585,7 @@ const firestoreService = {
         if (existingMs > now) {
             return new Date(existingMs);
         }
-        const expiresAt = new Date(now + 24 * 60 * 60 * 1000); // +24 hours
+        const expiresAt = new Date(now + 8 * 60 * 60 * 1000); // +8 hours
         await ref.update({
             managerOpenedAt: firebase.firestore.FieldValue.serverTimestamp(),
             managerExpiresAt: firebase.firestore.FieldValue.serverTimestamp(),
@@ -888,5 +888,6 @@ window.formatTrackingAccessWindow = function(ms) {
 window.firestoreService = firestoreService;
 window.db = db;
 window.auth = auth;
+
 
 

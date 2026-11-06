@@ -4,9 +4,11 @@
 // must NOT be possible:
 //
 //   1. firestore.rules lets HR read ONLY documents a superadmin transferred.
-//   2. HR still has no create / update / delete on `violations` at all.
-//   3. The HR page renders no edit / delete / transfer control at all.
-//   4. The transfer is superadmin-only in the UI, and reversible.
+//   2. HR may update ONLY the managerStatus/manager* handoff fields on reports
+//      already transferred to HR (isTransferredToHr) — never hrStatus or report data.
+//   3. The HR page renders a "Transfer to Area Manager" button — HR is the
+//      mediator who hands reports on to the Area Manager.
+//   4. The transfer is reversible by HR and superadmin.
 //
 // The rest covers the plumbing: the shared PDF builder is loaded by BOTH pages,
 // the query carries the `where()` the rules require, and the transfer writes the
@@ -94,25 +96,44 @@ assert(
 );
 
 // ---------------------------------------------------------------
-// 2. HR must never be able to write
+// 2. HR may write ONLY the managerStatus handoff fields, on reports
+//    already transferred to HR — never hrStatus or report data
 // ---------------------------------------------------------------
-console.log('\n=== firestore.rules: HR still cannot write ===');
+console.log('\n=== firestore.rules: HR can update manager* handoff fields ===');
 
-const updateRules = violationsBlock.match(/allow update[^\n]*/g) || [];
-const deleteRules = violationsBlock.match(/allow [^\n]*delete[^\n]*/g) || [];
-assert(updateRules.length > 0, 'the violations block must still declare its update rules');
-assert(deleteRules.length > 0, 'the violations block must still declare its delete rules');
-[...updateRules, ...deleteRules].forEach((rule) => {
+// Extract full multiline update rules (everything from "allow update" to the next ";")
+const updateRuleTexts = violationsBlock.match(/allow update[\s\S]*?;/g) || [];
+// Delete rules are always single-line in this file
+const deleteRuleTexts = violationsBlock.match(/allow [^\n]*delete[^\n]*;/g) || [];
+assert(updateRuleTexts.length > 0, 'the violations block must still declare its update rules');
+assert(deleteRuleTexts.length > 0, 'the violations block must still declare its delete rules');
+
+// HR's update rule must exist, must mention isHr(), must be gated on isTransferredToHr(),
+// and must only touch manager* fields (never hrStatus or report data).
+const hrUpdateRule = updateRuleTexts.find((r) => /\bisHr\(/.test(r));
+assert(hrUpdateRule, 'firestore.rules must have an update rule mentioning isHr() for the manager handoff');
+assert(/isTransferredToHr\(\)/.test(hrUpdateRule), "HR's update rule must be gated on isTransferredToHr()");
+assert(/managerStatus/.test(hrUpdateRule), "HR's update rule must cover managerStatus");
+
+// HR must NOT be able to touch hrStatus or report data via its update rule.
+assert(
+    !/hrStatus/.test(hrUpdateRule),
+    "HR's update rule must NOT mention hrStatus — that would let HR re-transfer away from themselves"
+);
+
+// Delete rules remain superadmin/operator-only (HR cannot delete reports).
+[...deleteRuleTexts].forEach((rule) => {
     assert(
         !/\bisHr\(/.test(rule),
-        'no update/delete rule may mention isHr() — HR is read-only. Got: ' + rule
+        'no delete rule may mention isHr() — HR cannot delete reports. Got: ' + rule
     );
 });
 
 // ---------------------------------------------------------------
-// 3. The HR page must carry no write controls
+// 3. The HR page carries a "Transfer to Area Manager" button
+//    but no delete / edit control — HR is the mediator
 // ---------------------------------------------------------------
-console.log('\n=== The HR tab is view-only ===');
+console.log('\n=== The HR tab carries the Area Manager transfer button ===');
 
 const hrTab = (() => {
     const start = ownerHtml.indexOf('<section class="tab-content" id="tabViolations">');
@@ -129,13 +150,22 @@ const hrModal = (() => {
 })();
 
 assert(
-    !/btnDeleteViolation|btnEditViolation|btnTransferViolation/.test(hrTab + hrModal),
-    'the HR tab and modal must contain NO delete / edit / transfer control'
+    !/btnDeleteViolation|btnEditViolation/.test(hrTab + hrModal),
+    'the HR tab and modal must contain NO delete / edit control'
 );
-// The only write-capable service calls are the read-only ones.
 assert(
-    !/\.(addViolation|updateViolation|deleteViolation|transferViolationToHr|revertViolationTransfer)\s*\(/.test(hrJs),
-    'js/hr-violations.js must never call a write method on a violation report'
+    /btnHrTransferToManager/.test(hrTab + hrModal),
+    'the HR modal must carry a Transfer to Area Manager button (id btnHrTransferToManager)'
+);
+// HR may call the Area Manager handoff service methods (transfer + revert).
+assert(
+    /transferViolationToAreaManager|revertViolationTransferFromAreaManager/.test(hrJs),
+    'js/hr-violations.js must call the Area Manager handoff service methods'
+);
+// HR must NOT call the HR-side transfer methods (those are superadmin-only).
+assert(
+    !/transferViolationToHr|revertViolationTransfer[^F]/.test(hrJs),
+    'js/hr-violations.js must not call the HR-side transfer methods — those are superadmin-only'
 );
 assert(
     /hrStatus !== 'transferred'/.test(hrJs),

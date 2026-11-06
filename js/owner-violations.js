@@ -464,7 +464,7 @@
         // separate and read-only on their own tabs).
         const role = readRole();
         if (role === 'owner' || role === 'area manager' || role === 'am' || role === 'rmsm' || role === 'rm/sm' || role === 'rm sm') {
-            const now = Date.now();
+            const expiresAt = new Date(Date.now() + 8 * 60 * 60 * 1000); // +8 hours
 
             // Consult every available source of the deadline so a reopen does NOT
             // reset the countdown: the Firestore-stamped value, the in-memory
@@ -480,7 +480,7 @@
                 }
             } catch (e) { /* ignore */ }
 
-            if (existingExpiry > now) {
+            if (existingExpiry > Date.now()) {
                 countdownDeadlineFor = v.id;
                 countdownDeadline = existingExpiry;
                 if (v) v.managerExpiresAtMs = existingExpiry;
@@ -529,7 +529,7 @@
             } else {
                 // No valid expiry — start a fresh 24-hour deadline.
                 countdownDeadlineFor = v.id;
-                countdownDeadline = now + 24 * 60 * 60 * 1000;
+                countdownDeadline = Date.now() + 8 * 60 * 60 * 1000;
                 if (v) v.managerExpiresAtMs = countdownDeadline;
                 persistCountdown();
                 injectCountdownBar();
@@ -603,12 +603,12 @@
         const el = document.getElementById('ov-countdown-timer');
         if (!el) return;
         const remaining = Math.max(0, Math.ceil((countdownDeadline - Date.now()) / 1000));
-        const m = Math.floor(remaining / 60);
-        const s = remaining % 60;
-        el.textContent = `${m}:${String(s).padStart(2, '0')}`;
-        if (remaining <= 10) el.classList.add('ov-countdown-warn');
+        const h = Math.floor(remaining / 3600);
+        const m = Math.floor((remaining % 3600) / 60);
+        el.textContent = `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+        if (remaining <= 600) el.classList.add('ov-countdown-warn');
         if (remaining <= 0) {
-            el.textContent = '0:00';
+            el.textContent = '00:00';
             stopCountdown();
             autoRevertAfterCountdown();
         }
@@ -616,7 +616,7 @@
 
     /** Start the 24-hour countdown for the given report. */
     function startCountdownFor(violationId) {
-        countdownDeadline = Date.now() + 24 * 60 * 60 * 1000; // 24 hours from now
+        countdownDeadline = Date.now() + 8 * 60 * 60 * 1000; // 8 hours from now
 
         // No Firestore stamp — Area Manager cannot write to violations.
         // The expiry deadline lives in localStorage only. The actual revert
@@ -957,3 +957,6 @@
         init();
     }
 })();
+
+
+

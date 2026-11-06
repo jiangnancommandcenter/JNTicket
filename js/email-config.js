@@ -65,7 +65,7 @@ window.EMAIL_CONFIG = {
     //    Then verify from the browser console on the deployed page:
     //        await verifyPortalLink()
     //    and, on a phone using mobile data, click the link in a real test email.
-    portalUrl: '',
+    portalUrl: 'https://jiangnancommandcenter.github.io/JN-Ticket/ETOLATEST/submit-ticket.html',
 
     // 4b) THE OWNER DASHBOARD LINK — THIS IS THE ONE THE APPROVAL EMAIL SENDS.
     //
@@ -93,7 +93,7 @@ window.EMAIL_CONFIG = {
     //
     //    Then verify from the console on the DEPLOYED page:
     //        await verifyOwnerDashboardLink()
-    ownerDashboardUrl: '',
+    ownerDashboardUrl: 'https://jiangnancommandcenter.github.io/JN-Ticket/ETOLATEST/ownerdashboard.html',
 
     // 5) OPTIONAL display name for the To: line ('' = plain email address).
     toDisplayName: '',
@@ -107,7 +107,7 @@ window.EMAIL_CONFIG = {
     //            reports stage 'local-dev' instead of failing.
     //    false = production. Any link that cannot work for a real requester is
     //            reported loudly. LEAVE THIS false WHEN YOU GO LIVE.
-    localDev: true,
+    localDev: false,
 
     // Master switch. false = never send (the Approve button is unaffected).
     enabled: true

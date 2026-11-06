@@ -422,6 +422,32 @@ function syncNewTicketButton() {
   ownerNewTicketBtn.title = show ? 'Submit an incident ticket' : '';
 }
 
+/** Reveal + wire the header chat trigger (#cmdPaletteBtn) only when chat is
+ * actually available for the signed-in role. Wiring is duplicate-guarded so a
+ * re-role in another tab never stacks click handlers. */
+function syncChatTrigger(enabled) {
+  const btn = document.getElementById('cmdPaletteBtn');
+  if (!btn) return;
+  if (enabled) {
+    btn.hidden = false;
+    btn.classList.remove('u-hidden');
+    btn.removeAttribute('aria-hidden');
+    btn.title = 'Open chat';
+    if (!btn.dataset.chatWired) {
+      btn.dataset.chatWired = '1';
+      btn.addEventListener('click', function () {
+        if (window.ChatService && typeof window.ChatService.open === 'function') {
+          window.ChatService.open();
+        }
+      });
+    }
+  } else {
+    btn.hidden = true;
+    btn.classList.add('u-hidden');
+    btn.setAttribute('aria-hidden', 'true');
+  }
+}
+
 // Open the full-screen submission modal. Guarded by the same isAreaManager()
 // check as the button's visibility: `hidden` is a CSS/AT concern, not a
 // security boundary, and a caller with a reference to the element can always
@@ -510,7 +536,8 @@ function setActiveUser(permissions, role = 'viewer') {
   // canChat() rejects 'owner' (the stored value), operators and anything unknown.
   if (window.ChatService && typeof window.ChatService.init === 'function') {
     try {
-      window.ChatService.init({ surface: 'owner', role: normalizedRole });
+      const chatEnabled = window.ChatService.init({ surface: 'owner', role: normalizedRole });
+      syncChatTrigger(chatEnabled);
     } catch (e) {
       console.warn('Chat init failed:', e);
     }
@@ -777,7 +804,17 @@ async function loadBranches() {
       throw new Error('firestoreService.getBranches is not available');
     }
 
-    const branches = await window.firestoreService.getBranches();
+    // Cache-first: instant paint on repeat visits (branches change infrequently),
+    // then fall back to the server if the cache is empty or missing.
+    let branches;
+    try {
+        branches = await window.firestoreService.getBranches({ source: 'cache' });
+    } catch (e) {
+        branches = null; // no cache yet — load from server below
+    }
+    if (!branches || !branches.length) {
+        branches = await window.firestoreService.getBranches();
+    }
     ownerAllBranches = branches
       .map((b) => b.branchName || b.id || '')
       .filter(Boolean)
@@ -2023,6 +2060,156 @@ window.openOwnerReport = function(reportId) {
  * "Reopen requested" chip immediately — the manager should not have to close
  * and reopen the modal to see that their request landed.
  */
+async function compressVideoBeforeUpload(file, onProgress) {
+  if (!file.type.startsWith('video/')) return file;
+  if (file.size <= 5 * 1024 * 1024) return file;
+
+  try {
+    var video = document.createElement('video');
+    video.muted = true;
+    video.playsInline = true;
+    video.src = URL.createObjectURL(file);
+
+    // ⚠️ Wait for metadata so videoWidth/videoHeight/duration are populated.
+    // Without this they are 0, canvas is 0×0, nothing gets drawn,
+    // and the recorder stops almost immediately.
+    await new Promise(function (resolve) {
+      if (video.readyState >= 1) resolve();
+      else video.onloadedmetadata = resolve;
+    });
+
+    var duration = video.duration;
+    // Safety: if duration is invalid or infinite, use a sane default
+    if (!duration || duration === Infinity) duration = 60;
+
+    // Target size: ~2/3 of original (e.g. 90MB → ~60MB).
+    var originalSizeMB = file.size / (1024 * 1024);
+    var targetSizeMB = Math.max(originalSizeMB * (2 / 3), 1);
+    var targetBits = targetSizeMB * 8 * 1024 * 1024;
+    var bitrate = Math.floor(targetBits / duration);
+    // Guardrails: prevent quality collapse on short clips, and prevent
+    // a compressed output larger than the original on already-efficient video.
+    var minBitrate = 300 * 1000;   // 300 kbps floor
+    var maxBitrate = 8 * 1000 * 1000; // 8 Mbps ceiling
+    bitrate = Math.max(minBitrate, Math.min(bitrate, maxBitrate));
+
+    // Use original resolution — do not downscale.
+    var canvas = document.createElement('canvas');
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+    var ctx = canvas.getContext('2d');
+
+    // Build a stream that preserves the original frame rate (no forced FPS)
+    // and includes the original audio track so audio + sync are preserved.
+    var videoStream = canvas.captureStream();
+    var stream = new MediaStream(videoStream.getVideoTracks());
+
+    // Capture audio from the video element so it is preserved in the output.
+    try {
+      var audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      if (audioCtx.state === 'suspended') {
+        await audioCtx.resume();
+      }
+      var mediaElementSource = audioCtx.createMediaElementSource(video);
+      var audioDest = audioCtx.createMediaStreamDestination();
+      mediaElementSource.connect(audioDest);
+      for (var i = 0; i < audioDest.stream.getAudioTracks().length; i++) {
+        stream.addTrack(audioDest.stream.getAudioTracks()[i]);
+      }
+    } catch (e) {
+      // Audio capture is optional — proceed with video-only if it fails.
+      console.warn('[VideoCompress] Audio capture skipped:', e.message);
+    }
+
+    var recorder = new MediaRecorder(stream, {
+      mimeType: 'video/webm; codecs=vp9',
+      videoBitsPerSecond: bitrate
+    });
+
+    var chunks = [];
+    recorder.ondataavailable = function (e) { if (e.data.size > 0) chunks.push(e.data); };
+
+    var finished = false;
+    var startTime = performance.now();
+    var animationFrameId = null;
+    var timeoutId = null;
+
+    // Safety timeout: stop after duration + 10 seconds so a stuck
+    // video never freezes the upload forever.
+    var maxTime = duration * 1000 + 10000;
+
+    var draw = function () {
+      if (finished) return;
+      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+      var elapsed = (performance.now() - startTime) / 1000;
+      var pct = Math.min(100, Math.round((elapsed / duration) * 100));
+      if (typeof onProgress === 'function') onProgress(pct);
+      if (elapsed >= duration || video.ended) {
+        finished = true;
+        if (animationFrameId) cancelAnimationFrame(animationFrameId);
+        if (timeoutId) clearTimeout(timeoutId);
+        recorder.stop();
+      } else {
+        animationFrameId = requestAnimationFrame(draw);
+      }
+    };
+
+    await new Promise(function (resolve, reject) {
+      recorder.onstop = resolve;
+      recorder.onerror = reject;
+
+      // Safety timeout: force-stop the recorder if it runs too long.
+      timeoutId = setTimeout(function () {
+        if (!finished) {
+          finished = true;
+          if (animationFrameId) cancelAnimationFrame(animationFrameId);
+          recorder.stop();
+        }
+      }, maxTime);
+
+      recorder.start();
+
+      // ⚠️ Await video.play() so the video actually plays during
+      // compression instead of freezing on frame 0 when autoplay is blocked.
+      video.play().then(function () {
+        draw();
+      }).catch(function () {
+        // Autoplay blocked — start drawing anyway; canvas may still capture frames.
+        draw();
+      });
+    });
+
+    // Ensure the encoder flushes any final chunk before we build the blob.
+    await new Promise(function (resolve) { setTimeout(resolve, 0); });
+
+    var blob = new Blob(chunks, { type: 'video/webm' });
+    if (!blob || blob.size === 0) {
+      URL.revokeObjectURL(video.src);
+      video.load();
+      video.pause();
+      console.warn('[VideoCompress] Empty compressed output, returning original.');
+      return file;
+    }
+
+    URL.revokeObjectURL(video.src);
+    video.load(); // release video resources so the file is not locked
+    video.pause();
+
+    var compressed = new File([blob], file.name, {
+      type: 'video/webm',
+      lastModified: file.lastModified
+    });
+
+    console.log('[VideoCompress] Compressed:', file.name,
+      '→', (file.size / 1024 / 1024).toFixed(2), 'MB',
+      '→', (compressed.size / 1024 / 1024).toFixed(2), 'MB');
+    return compressed.size < file.size ? compressed : file;
+  } catch (e) {
+    console.warn('[VideoCompress] Skipping compression:', e.message);
+    return file;
+  }
+}
+
 function handleOwnerReopenSubmit(event) {
   event.preventDefault();
   const form = event.target;
@@ -2051,8 +2238,11 @@ function handleOwnerReopenSubmit(event) {
     if (file) {
       if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Uploading...'; }
       try {
+        const uploadFile = await compressVideoBeforeUpload(file, function (pct) {
+            if (btn) btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Compressing ' + pct + '%…';
+        });
         const formData = new FormData();
-        formData.append('file', file);
+        formData.append('file', uploadFile);
         formData.append('upload_preset', 'jiangnan');
         formData.append('folder', 'tickets/' + ticketId + '/reopen');
         const res = await fetch('https://api.cloudinary.com/v1_1/jlux07ne/auto/upload', { method: 'POST', body: formData });

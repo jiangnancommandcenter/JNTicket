@@ -13,6 +13,10 @@
     <meta name="theme-color" id="themeColorMeta" content="#72bf6a">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <!-- Firebase + Google APIs: warm up connections early so the SDKs load faster -->
+    <link rel="preconnect" href="https://www.gstatic.com" crossorigin>
+    <link rel="preconnect" href="https://firestore.googleapis.com" crossorigin>
+    <link rel="preconnect" href="https://securetoken.googleapis.com" crossorigin>
     <!-- Chart.js (same version as main.html) -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
     <link rel="stylesheet" href="style.css">
@@ -1250,6 +1254,59 @@
             #ownerUserRoleBadge { font-size: 0.72rem; padding: 5px 10px; }
         }
     </style>
+    <!-- ================================================================
+       CHAT + TICKET — mobile-friendly header triggers
+       ================================================================
+       Chat now opens from #cmdPaletteBtn in the header instead of a
+       floating bottom-right circle (which collides with phone keyboards
+       and viewport edges). The launcher is hidden on this page only.
+       The +Ticket button becomes a floating bubble (FAB) for the Area
+       Manager / RM/SM only — it ships hidden/u-hidden and is revealed
+       by syncNewTicketButton() once the role resolves. -->
+    <style>
+        /* Hide the old floating chat launcher; chat is triggered from the
+           header #cmdPaletteBtn button instead. !important wins over the
+           runtime els.launcher.hidden = false in js/chat.js. */
+        .chat-launcher { display: none !important; }
+
+        /* +Ticket floating bubble (FAB). Relies on .btn { display: inline-flex }
+           for layout, so the UA [hidden] rule and .btn[hidden] still hide it
+           while the role is unresolved — no author `display` override here. */
+        #btnOwnerNewTicket {
+            position: fixed;
+            bottom: 22px;
+            right: 22px;
+            z-index: 960;
+            width: 54px;
+            height: 54px;
+            min-width: 54px;
+            min-height: 54px;
+            border-radius: 50%;
+            padding: 0;
+            align-items: center;
+            justify-content: center;
+            box-shadow: var(--shadow-lg, 0 8px 26px rgba(114, 191, 106, 0.5));
+            transition: var(--transition);
+        }
+        #btnOwnerNewTicket span { display: none; }
+        #btnOwnerNewTicket .fa-plus { font-size: 1.4rem; }
+        #btnOwnerNewTicket:hover { transform: translateY(-2px) scale(1.04); }
+        #btnOwnerNewTicket:focus-visible {
+            outline: 2px solid var(--color-primary);
+            outline-offset: 3px;
+        }
+        @media (max-width: 899px) {
+            #btnOwnerNewTicket {
+                bottom: 16px;
+                right: 14px;
+                width: 48px;
+                height: 48px;
+                min-width: 48px;
+                min-height: 48px;
+            }
+            #btnOwnerNewTicket .fa-plus { font-size: 1.25rem; }
+        }
+    </style>
 </head>
 <body>
     <aside class="sidebar" id="ownerSidebar">
@@ -1336,13 +1393,23 @@
             </div>
             <div class="header-right">
                 <div class="header-actions">
+                    <!-- ===== CHAT TRIGGER ====
+                         Opens the HR <-> superadmin / Area Manager <-> RM/SM chat
+                         modal (js/chat.js). Lives in the header so it is always
+                         reachable on phones instead of a floating bottom-right
+                         circle that collides with the keyboard and the viewport
+                         edge. Ships `hidden` and is revealed only once chat init
+                         succeeds for the signed-in role (see
+                         syncChatTrigger() in js/owner-dashboard.js). -->
+                    <button type="button" class="icon-btn cmd-palette-btn" id="cmdPaletteBtn" aria-label="Open chat" title="Chat">
+                        <i class="fas fa-comments" aria-hidden="true"></i>
+                    </button>
+
                     <!-- ===== AREA MANAGER: "+Ticket" =====
-                         This entry point was previously removed for EVERY role
-                         because tickets were only filed from the public
-                         submit-ticket.html. It is back for the Area Manager
-                         alone (stored role 'owner'): they raise tickets for
-                         their own branches, whereas HR and superadmin work the
-                         queue rather than adding to it.
+                         Floating bubble (FAB) for the Area Manager (stored role
+                         'owner') and RM/SM ('rmsm') only. It raises tickets for
+                         their own branches; HR and superadmin work the queue
+                         rather than adding to it, so they never see it.
 
                          It is a <button>, NOT an <a> to the public form. The
                          submission form now lives in js/owner-ticket-form.js and
@@ -1365,8 +1432,7 @@
                          Manager. The role arrives asynchronously from
                          Firestore, so anything rendered visible by default
                          would flash on screen for HR / superadmin on every
-                         load. The .header-actions wrapper is kept because the
-                         dark-mode toggle below lives in it. -->
+                         load. -->
                     <button type="button" class="btn btn-primary btn-add" id="btnOwnerNewTicket" hidden>
                         <i class="fas fa-plus"></i>
                         <span>Ticket</span>
@@ -1765,6 +1831,9 @@
                 <button type="button" class="btn btn-sm btn-primary" id="btnHrViolationReport" title="Download the report PDF to your computer">
                     <i class="fas fa-file-pdf"></i> <span>Download Report</span>
                 </button>
+                <button type="button" class="btn btn-sm btn-success u-hidden" id="btnHrTransferToManager" style="display:none;" title="Send this report to the Area Manager so they can review it for their branches">
+                    <i class="fas fa-share-nodes" id="btnHrTransferToManagerIcon"></i> <span id="btnHrTransferToManagerLabel">Transfer to Area Manager</span>
+                </button>
                 <button class="modal-close" id="closeHrViolationModal">&times;</button>
             </div>
             <div class="modal-body">
@@ -1920,3 +1989,4 @@
     <script src="js/command-palette.js"></script>
 </body>
 </html>
+

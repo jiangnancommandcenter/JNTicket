@@ -487,10 +487,14 @@ function escapeEmailHtml(value) {
 function buildTicketApprovedEmail(ticket) {
     const label = ticketEmailLabel(ticket);
     const dashboardUrl = resolveOwnerDashboardUrl();
-    // The deep link actually used as the href. Falls back to the bare dashboard
+    // Public requesters (no Area Manager account) land on the login-free Track
+    // portal so they can check their ticket without signing in. Area Managers
+    // (filedByRole === 'owner') keep the dashboard deep link they already use.
+    const isPublicRequester = ticket && ticket.filedByRole === 'public';
+    // The deep link actually used as the href. Falls back to the bare page
     // when there is no usable ticket number, so href is NEVER empty — an empty
     // href renders as un-clickable text, which is the bug being fixed here.
-    const ticketUrl = resolveOwnerTicketUrl(label);
+    const ticketUrl = isPublicRequester ? resolveTrackUrl(label) : resolveOwnerTicketUrl(label);
     const senderName = String(emailConfigValue('senderName', 'Jiangnan Command Center'));
 
     // ⚠️ Keep this sentence verbatim — it is the automated text requested by
@@ -526,11 +530,11 @@ function buildTicketApprovedEmail(ticket) {
         '',
         '   Ticket Number:  ' + label,
         '',
-        'View it on your Owner Dashboard:',
+        isPublicRequester ? 'Track your ticket on the public portal:' : 'View it on your Owner Dashboard:',
         ticketUrl,
         '',
-        '  -> sign in with your account',
-        '  -> ticket ' + label + ' will open automatically.'
+        isPublicRequester ? '  -> open the link above to check your ticket status' : '  -> sign in with your account',
+        isPublicRequester ? '  -> no sign-in required; enter your ticket number and contact' : '  -> ticket ' + label + ' will open automatically.'
     ];
     if (windowLine) lines.push('', windowLine);
     lines.push('', senderName);
@@ -551,10 +555,13 @@ function buildTicketApprovedEmail(ticket) {
         '</span></p>',
         '<p style="margin:0 0 18px">',
         '<a href="' + escapeEmailHtml(ticketUrl) + '" style="display:inline-block;background:#15803d;color:#ffffff;font-weight:700;font-size:16px;text-decoration:none;padding:14px 28px;border-radius:8px">',
-        'Open my Owner Dashboard &rarr;</a>',
+        isPublicRequester ? 'Track My Ticket &rarr;</a>' : 'Open my Owner Dashboard &rarr;</a>',
         '</p>',
-        '<p style="margin:0 0 6px;color:#475569">Sign in with your account and ticket <strong>'
-            + escapeEmailHtml(label) + '</strong> opens automatically.</p>',
+        '<p style="margin:0 0 6px;color:#475569">' +
+        (isPublicRequester
+            ? 'No sign-in required — open the link above, then enter your ticket number and the contact you used when filing.'
+            : 'Sign in with your account and ticket <strong>' + escapeEmailHtml(label) + '</strong> opens automatically.') +
+        '</p>',
         // Fallback link, deliberately plain so no client can style it away.
         '<p style="margin:0 0 6px;font-size:12px;color:#64748b">If the button does not work, paste this '
             + 'into your browser:<br><a href="' + escapeEmailHtml(ticketUrl) + '" style="color:#15803d;word-break:break-all">'

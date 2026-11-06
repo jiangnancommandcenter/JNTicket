@@ -432,6 +432,19 @@ service cloud.firestore {
         && request.resource.data.diff(resource.data).affectedKeys()
              .hasOnly(['managerOpenedAt', 'managerExpiresAt', 'managerExpiresAtMs',
                        'managerOpenedBy', 'managerOpenedByName', 'updatedAt']);
+      // HR may hand a report they already read off to the Area Manager
+      // (managerStatus), or take it back, without touching hrStatus or any
+      // report data. Scoped to reports HR can already read (isTransferredToHr).
+      allow update: if isHr()
+        && isTransferredToHr()
+        && request.resource.data.diff(resource.data).affectedKeys()
+             .hasOnly(['managerStatus', 'managerTransferredAt',
+                       'managerTransferredBy', 'managerTransferredByName',
+                       'managerRevertedAt', 'managerRevertedBy',
+                       'managerRevertedByName', 'managerExpiresAt',
+                       'managerExpiresAtMs', 'managerOpenedAt',
+                       'managerOpenedBy', 'managerOpenedByName',
+                       'updatedAt']);
       allow update, delete: if isSuperAdmin() || (isOperatorOrSuperAdmin() && isOwnViolation());
     }
 

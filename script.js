@@ -885,7 +885,8 @@ function showConfirmDialog(options = {}) {
         icon = 'fa-question-circle',
         reason = '',
         reasonLabel = 'Reason',
-        reasonMeta = ''
+        reasonMeta = '',
+        confirmByTyping = null
     } = options;
 
     return new Promise((resolve) => {
@@ -898,6 +899,13 @@ function showConfirmDialog(options = {}) {
         const cancelBtn = document.getElementById('cancelConfirmBtn');
         const iconEl = document.getElementById('confirmModalIcon');
 
+        // Type-to-confirm elements (ticket deletion only)
+        const typingSection = document.getElementById('confirmTypingSection');
+        const typingInput = document.getElementById('confirmTypingInput');
+        const typingError = document.getElementById('confirmTypingError');
+        const ticketNumberEl = document.getElementById('confirmTicketNumber');
+        const copyTicketBtn = document.getElementById('copyTicketNumberBtn');
+
         if (titleEl) titleEl.textContent = title;
         if (messageEl) {
             messageEl.innerHTML = message;
@@ -909,6 +917,46 @@ function showConfirmDialog(options = {}) {
             iconEl.className = 'fas ' + icon + ' confirm-modal-icon';
             iconEl.style.color = danger ? 'var(--color-danger)' : 'var(--color-warning)';
         }
+
+        // ---- Type-to-confirm setup ----
+        const isTypingConfirm = confirmByTyping !== null;
+        if (typingSection) {
+            if (isTypingConfirm) {
+                typingSection.classList.remove('u-hidden');
+                if (ticketNumberEl) ticketNumberEl.textContent = confirmByTyping;
+                if (typingInput) typingInput.value = '';
+                if (typingError) typingError.classList.add('u-hidden');
+                if (acceptBtn) acceptBtn.disabled = true;
+
+                // Copy ticket number button
+                if (copyTicketBtn) {
+                    copyTicketBtn.onclick = async function () {
+                        try {
+                            await navigator.clipboard.writeText(String(confirmByTyping));
+                            var orig = copyTicketBtn.innerHTML;
+                            copyTicketBtn.innerHTML = '<i class="fas fa-check"></i> Copied!';
+                            setTimeout(function () { copyTicketBtn.innerHTML = orig; }, 1500);
+                        } catch (e) {
+                            // Clipboard unavailable — user can still type manually
+                        }
+                    };
+                }
+
+                // Validate input on every keystroke
+                if (typingInput) {
+                    typingInput.oninput = function () {
+                        var match = String(typingInput.value || '').trim() === String(confirmByTyping);
+                        if (acceptBtn) acceptBtn.disabled = !match;
+                        if (typingError) typingError.classList.toggle('u-hidden', match);
+                    };
+                    typingInput.focus();
+                }
+            } else {
+                typingSection.classList.add('u-hidden');
+                if (acceptBtn) acceptBtn.disabled = false;
+            }
+        }
+
         if (acceptBtn) {
             acceptBtn.className = 'btn ' + (danger ? 'btn-danger' : 'btn-primary');
             acceptBtn.innerHTML = '<i class="fas ' + (danger ? 'fa-trash-alt' : 'fa-check') + '"></i> ' + confirmText;
@@ -6303,10 +6351,11 @@ window.reopenTicket = async function(id) {
 window.deleteTicket = async function(id) {
     const confirmed = await showConfirmDialog({
         title: 'Delete Ticket',
-        message: 'Are you sure you want to delete this ticket?',
+        message: 'Type the ticket number below to confirm permanent deletion.',
         confirmText: 'Delete',
         danger: true,
-        icon: 'fa-trash-alt'
+        icon: 'fa-trash-alt',
+        confirmByTyping: id
     });
     if (!confirmed) return;
     try {
@@ -6641,13 +6690,164 @@ window.removeTicketAttachment = async function(ticketId, publicId) {
     }
 };
 
+async function compressVideoBeforeUpload(file, onProgress) {
+    if (!file.type.startsWith('video/')) return file;
+    if (file.size <= 5 * 1024 * 1024) return file;
+
+    try {
+        const video = document.createElement('video');
+        video.muted = true;
+        video.playsInline = true;
+        video.src = URL.createObjectURL(file);
+
+        // ⚠️ Wait for metadata so videoWidth/videoHeight/duration are populated.
+        // Without this they are 0, canvas is 0×0, nothing gets drawn,
+        // and the recorder stops almost immediately.
+        await new Promise((resolve) => {
+            if (video.readyState >= 1) resolve();
+            else video.onloadedmetadata = resolve;
+        });
+
+        let duration = video.duration;
+        // Safety: if duration is invalid or infinite, use a sane default
+        if (!duration || duration === Infinity) duration = 60;
+
+        // Target size: ~2/3 of original (e.g. 90MB → ~60MB).
+        const originalSizeMB = file.size / (1024 * 1024);
+        const targetSizeMB = Math.max(originalSizeMB * (2 / 3), 1);
+        const targetBits = targetSizeMB * 8 * 1024 * 1024;
+        let bitrate = Math.floor(targetBits / duration);
+        // Guardrails: prevent quality collapse on short clips, and prevent
+        // a compressed output larger than the original on already-efficient video.
+        const minBitrate = 300 * 1000;   // 300 kbps floor
+        const maxBitrate = 8 * 1000 * 1000; // 8 Mbps ceiling
+        bitrate = Math.max(minBitrate, Math.min(bitrate, maxBitrate));
+
+        // Use original resolution — do not downscale.
+        const canvas = document.createElement('canvas');
+        canvas.width = video.videoWidth;
+        canvas.height = video.videoHeight;
+        const ctx = canvas.getContext('2d');
+
+        // Build a stream that preserves the original frame rate (no forced FPS)
+        // and includes the original audio track so audio + sync are preserved.
+        const videoStream = canvas.captureStream();
+        const stream = new MediaStream(videoStream.getVideoTracks());
+
+        // Capture audio from the video element so it is preserved in the output.
+        try {
+            const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            if (audioCtx.state === 'suspended') {
+                await audioCtx.resume();
+            }
+            const mediaElementSource = audioCtx.createMediaElementSource(video);
+            const audioDest = audioCtx.createMediaStreamDestination();
+            mediaElementSource.connect(audioDest);
+            for (const track of audioDest.stream.getAudioTracks()) {
+                stream.addTrack(track);
+            }
+        } catch (e) {
+            // Audio capture is optional — proceed with video-only if it fails.
+            console.warn('[VideoCompress] Audio capture skipped:', e.message);
+        }
+
+        const recorder = new MediaRecorder(stream, {
+            mimeType: 'video/webm; codecs=vp9',
+            videoBitsPerSecond: bitrate
+        });
+
+        const chunks = [];
+        recorder.ondataavailable = e => { if (e.data.size > 0) chunks.push(e.data); };
+
+        let finished = false;
+        const startTime = performance.now();
+        let animationFrameId = null;
+        let timeoutId = null;
+
+        // Safety timeout: stop after duration + 10 seconds so a stuck
+        // video never freezes the upload forever.
+        const maxTime = duration * 1000 + 10000;
+
+        const draw = () => {
+            if (finished) return;
+            ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+            const elapsed = (performance.now() - startTime) / 1000;
+            const pct = Math.min(100, Math.round((elapsed / duration) * 100));
+            if (typeof onProgress === 'function') onProgress(pct);
+            if (elapsed >= duration || video.ended) {
+                finished = true;
+                if (animationFrameId) cancelAnimationFrame(animationFrameId);
+                if (timeoutId) clearTimeout(timeoutId);
+                recorder.stop();
+            } else {
+                animationFrameId = requestAnimationFrame(draw);
+            }
+        };
+
+        await new Promise((resolve, reject) => {
+            recorder.onstop = resolve;
+            recorder.onerror = reject;
+
+            // Safety timeout: force-stop the recorder if it runs too long.
+            timeoutId = setTimeout(() => {
+                if (!finished) {
+                    finished = true;
+                    if (animationFrameId) cancelAnimationFrame(animationFrameId);
+                    recorder.stop();
+                }
+            }, maxTime);
+
+            recorder.start();
+
+            // ⚠️ Await video.play() so the video actually plays during
+            // compression instead of freezing on frame 0 when autoplay is blocked.
+            video.play().then(() => {
+                draw();
+            }).catch(() => {
+                // Autoplay blocked — start drawing anyway; canvas may still capture frames.
+                draw();
+            });
+        });
+
+        // Ensure the encoder flushes any final chunk before we build the blob.
+        await new Promise(resolve => setTimeout(resolve, 0));
+
+        const blob = new Blob(chunks, { type: 'video/webm' });
+        if (!blob || blob.size === 0) {
+            URL.revokeObjectURL(video.src);
+            video.load();
+            video.pause();
+            console.warn('[VideoCompress] Empty compressed output, returning original.');
+            return file;
+        }
+
+        URL.revokeObjectURL(video.src);
+        video.load(); // release video resources so the file is not locked
+        video.pause();
+
+        const compressed = new File([blob], file.name, {
+            type: 'video/webm',
+            lastModified: file.lastModified
+        });
+
+        console.log('[VideoCompress] Compressed:', file.name,
+            '→', (file.size / 1024 / 1024).toFixed(2), 'MB',
+            '→', (compressed.size / 1024 / 1024).toFixed(2), 'MB');
+        return compressed.size < file.size ? compressed : file;
+    } catch (e) {
+        console.warn('[VideoCompress] Skipping compression:', e.message);
+        return file;
+    }
+}
+
 async function cloudinaryUpload(file, ticketId, onProgress) {
+    const uploadFile = await compressVideoBeforeUpload(file, onProgress);
     // Use XMLHttpRequest when a progress callback is supplied so we can report
     // real upload percentage (fetch does not expose upload progress).
     if (typeof onProgress === 'function') {
         return new Promise((resolve, reject) => {
             const formData = new FormData();
-            formData.append('file', file);
+            formData.append('file', uploadFile);
             formData.append('upload_preset', CLOUDINARY_UPLOAD_PRESET);
             formData.append('folder', 'tickets/' + ticketId);
             formData.append('public_id', makeUniquePublicId(file.name));
@@ -6688,10 +6888,10 @@ async function cloudinaryUpload(file, ticketId, onProgress) {
 
     // Fallback: original fetch-based upload (no progress).
     const formData = new FormData();
-    formData.append('file', file);
+    formData.append('file', uploadFile);
     formData.append('upload_preset', CLOUDINARY_UPLOAD_PRESET);
     formData.append('folder', 'tickets/' + ticketId);
-    formData.append('public_id', makeUniquePublicId(file.name));
+    formData.append('public_id', makeUniquePublicId(uploadFile.name));
     const res = await fetch(
         `https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/auto/upload`,
         { method: 'POST', body: formData }
@@ -8077,14 +8277,16 @@ async function violationCloudinaryUpload(file, folderPath, onProgress) {
     if (!isViolationCloudinaryConfigured()) {
         throw new Error('Violations Cloudinary storage is not configured.');
     }
+    const uploadFile = await compressVideoBeforeUpload(file, onProgress);
+
     // Keep the original filename as a readable base, but add a short random
     // suffix so same-named files with different extensions (e.g. "0109.mp4" +
     // "0109.png") each get their own Cloudinary asset instead of overwriting
     // each other. Cloudinary appends the detected format automatically.
-    const uniquePublicId = makeUniquePublicId(file.name);
+    const uniquePublicId = makeUniquePublicId(uploadFile.name);
 
     const formData = new FormData();
-    formData.append('file', file);
+    formData.append('file', uploadFile);
     formData.append('upload_preset', VIOLATION_CLOUDINARY_UPLOAD_PRESET);
     formData.append('asset_folder', folderPath);
     formData.append('folder', folderPath);
@@ -8109,7 +8311,7 @@ async function violationCloudinaryUpload(file, folderPath, onProgress) {
         resource_type: data.resource_type,
         width: data.width || null,
         height: data.height || null,
-        bytes: data.bytes,
+        bytes: uploadFile.size,
         name: file.name,
         uploadedAt: new Date().toISOString()
     };
@@ -10146,7 +10348,8 @@ function bindViolationEvents() {
     if (closeViolationFormModalBtn) closeViolationFormModalBtn.addEventListener('click', closeViolationFormModal);
     if (cancelBtn) cancelBtn.addEventListener('click', closeViolationFormModal);
     if (violationModal) violationModal.addEventListener('click', (e) => { if (e.target === violationModal) closeViolationModal(); });
-    if (violationFormModal) violationFormModal.addEventListener('click', (e) => { if (e.target === violationFormModal) closeViolationFormModal(); });
+    // violationFormModal: backdrop click intentionally does NOT close — only the X button
+    // (closeViolationFormModalBtn) and Cancel button close it, plus auto-close on submit.
     if (violationForm) violationForm.addEventListener('submit', saveViolationForm);
     if (violationSearch) violationSearch.addEventListener('input', debounce(filterViolations));
     if (violationStoreFilter) violationStoreFilter.addEventListener('change', filterViolations);
