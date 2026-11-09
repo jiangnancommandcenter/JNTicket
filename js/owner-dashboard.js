@@ -2194,8 +2194,8 @@ function renderOwnerTickets(allTickets) {
   // usable date are always KEPT — safer than hiding a real ticket with a
   // missing timestamp.
   const OWNER_TICKET_PERIODS = { daily: 1, weekly: 7, monthly: 'month', all: 0 };
-  const periodValue = (ownerTicketPeriodFilter && ownerTicketPeriodFilter.value) || 'daily';
-  const selectedPeriod = OWNER_TICKET_PERIODS[periodValue] !== undefined ? periodValue : 'daily';
+  const periodValue = (ownerTicketPeriodFilter && ownerTicketPeriodFilter.value) || 'all';
+  const selectedPeriod = OWNER_TICKET_PERIODS[periodValue] !== undefined ? periodValue : 'all';
   let periodStart = null;
   if (selectedPeriod !== 'all') {
     periodStart = new Date();

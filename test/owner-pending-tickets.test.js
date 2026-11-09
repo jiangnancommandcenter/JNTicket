@@ -193,16 +193,16 @@ assert(
 // with "All" kept as the recovery option for older tickets.
 const periodSelect = ownerHtml.slice(ownerHtml.indexOf('id="ticketPeriodFilter"'), ownerHtml.indexOf('id="ticketPeriodFilter"') + 600);
 assert(
-    /<option value="daily" selected>Today<\/option>/.test(periodSelect),
-    'the period filter must default to "Today" — the manager triages today\'s work first'
+    /<option value="all" selected>All<\/option>/.test(periodSelect),
+    'the period filter must default to "All" — transferred tickets must not be stranded by a Today default'
 );
 assert(
-    /<option value="all">All<\/option>/.test(periodSelect),
-    'the period filter must KEEP the "All" option — without it older tickets are stranded'
+    /<option value="daily">Today<\/option>/.test(periodSelect),
+    'the period filter must KEEP the "Today" option'
 );
 assert(
-    /const periodValue = \(ownerTicketPeriodFilter && ownerTicketPeriodFilter\.value\) \|\| 'daily';/.test(listSrc),
-    'a missing/unreadable period select must fall back to Today, matching the markup default'
+    /const periodValue = \(ownerTicketPeriodFilter && ownerTicketPeriodFilter\.value\) \|\| 'all';/.test(listSrc),
+    'a missing/unreadable period select must fall back to All, matching the markup default'
 );
 console.log('  PASS  the approved gate is untouched; pending is appended for isAreaManager() and respects every filter');
 

@@ -693,6 +693,8 @@ let currentRejectTicketId = null;
 let currentApprovalTicketId = null;
 let approvalPage = 1;
 let filteredApprovalTickets = [];
+let approvalPendingFiles = [];
+let editApprovalPendingFiles = [];
 
 // Add Status Modal
 const addModal = $('#addModal');
@@ -4735,7 +4737,11 @@ window.openApprovalDetails = function(id) {
 
     renderApprovalAttachments(ticket);
     if (approvalUploadStatus) approvalUploadStatus.textContent = '';
-    if (approvalAttachmentInput) approvalAttachmentInput.value = '';
+    if (approvalAttachmentInput) {
+        approvalAttachmentInput.value = '';
+        approvalPendingFiles = [];
+        renderUploadFileList(approvalAttachmentInput.closest('.upload-widget'), []);
+    }
 
     // Footer actions only appear for tickets still awaiting final approval,
     // or for approved tickets whose window lapsed AND that somebody actually
@@ -4884,6 +4890,8 @@ if (!isCloudinaryConfigured()) {
 
             if (approvalUploadStatus) approvalUploadStatus.textContent = `Uploaded ${uploaded.length} file(s).`;
             if (input) input.value = '';
+            approvalPendingFiles = [];
+            renderUploadFileList(widget, []);
             setTimeout(() => { if (approvalUploadStatus) approvalUploadStatus.textContent = ''; }, 4000);
         } catch (error) {
             console.error('Approval attachment upload error:', error);
@@ -4908,7 +4916,11 @@ window.openEditApprovalModal = function(id) {
 
     const resolution = ticket.resolution || {};
     if (editApprovalNotes) editApprovalNotes.value = resolution.notes || ticket.resolutionNotes || '';
-    if (editApprovalAttachmentInput) editApprovalAttachmentInput.value = '';
+    if (editApprovalAttachmentInput) {
+        editApprovalAttachmentInput.value = '';
+        editApprovalPendingFiles = [];
+        renderUploadFileList(editApprovalAttachmentInput.closest('.upload-widget'), []);
+    }
     if (editApprovalUploadStatus) editApprovalUploadStatus.textContent = '';
     if (editApprovalError) editApprovalError.style.display = 'none';
 
@@ -5003,6 +5015,8 @@ const input = editApprovalAttachmentInput;
 
             if (editApprovalUploadStatus) editApprovalUploadStatus.textContent = `Uploaded ${uploaded.length} file(s).`;
             if (input) input.value = '';
+            editApprovalPendingFiles = [];
+            renderUploadFileList(widget, []);
             setTimeout(() => { if (editApprovalUploadStatus) editApprovalUploadStatus.textContent = ''; }, 4000);
         } catch (error) {
             console.error('Edit approval attachment upload error:', error);
@@ -6821,6 +6835,47 @@ function validateUploadFiles(files) {
 }
 
 /**
+ * Stage files for an approval dropzone, accumulating across multiple
+ * drag-drops / picker selections instead of replacing the previous set.
+ * Newly added files are appended (deduped by name+size), the widget's
+ * <input type="file"> is synced to the full pending array via DataTransfer so
+ * the Upload button uploads everything staged, and the file list is rendered
+ * with remove buttons. Removing a file deletes it from the pending array and
+ * re-syncs the input.
+ * @param {Array} pending   the pending-file array this widget owns
+ * @param {HTMLElement} widget  root `.upload-widget` element
+ * @param {HTMLInputElement} input  the widget's <input type="file">
+ * @param {FileList} files  newly selected/dropped files
+ */
+function addPendingFiles(pending, widget, input, files) {
+    const validation = validateUploadFiles(files);
+    if (!validation.ok) {
+        const statusEl = widget.querySelector('.attachment-upload-status');
+        if (statusEl) { statusEl.textContent = validation.message; statusEl.classList.add('error'); }
+        return;
+    }
+    const incoming = Array.from(files || []);
+    incoming.forEach(f => {
+        if (!pending.some(x => x.name === f.name && x.size === f.size)) {
+            pending.push(f);
+        }
+    });
+    // Sync the hidden input so the Upload button uploads everything staged.
+    const dt = new DataTransfer();
+    pending.forEach(f => dt.items.add(f));
+    input.files = dt.files;
+    renderUploadFileList(widget, pending, (name) => {
+        pending.splice(pending.findIndex(f => f.name === name), 1);
+        const dt2 = new DataTransfer();
+        pending.forEach(f => dt2.items.add(f));
+        input.files = dt2.files;
+        renderUploadFileList(widget, pending);
+        updateUploadWidgetButton(widget);
+    });
+    updateUploadWidgetButton(widget);
+}
+
+/**
  * Reset a widget's progress UI back to its idle state.
  */
 function resetUploadProgress(widget) {
@@ -6986,6 +7041,40 @@ function bindUploadDropzone(widget) {
             });
             updateUploadWidgetButton(widget);
         }
+    });
+}
+
+/**
+ * Wire up an approval dropzone so files accumulate across multiple
+ * drag-drops / picker selections instead of replacing the previous set.
+ * @param {HTMLElement} widget  root `.upload-widget` element
+ */
+function bindApprovalDropzone(widget) {
+    const dropzone = widget.querySelector('.upload-dropzone');
+    const input = widget.querySelector('input[type="file"]');
+    if (!dropzone || !input) return;
+
+    const isEdit = input.id === 'editApprovalAttachmentInput';
+    const pending = isEdit ? editApprovalPendingFiles : approvalPendingFiles;
+
+    dropzone.addEventListener('click', () => input.click());
+
+    dropzone.addEventListener('dragover', (e) => {
+        e.preventDefault();
+        dropzone.classList.add('dragover');
+    });
+    dropzone.addEventListener('dragleave', () => dropzone.classList.remove('dragover'));
+    dropzone.addEventListener('drop', (e) => {
+        e.preventDefault();
+        dropzone.classList.remove('dragover');
+        if (e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files.length) {
+            addPendingFiles(pending, widget, input, e.dataTransfer.files);
+        }
+    });
+
+    input.addEventListener('change', () => {
+        if (!input.files) return;
+        addPendingFiles(pending, widget, input, input.files);
     });
 }
 
@@ -7166,6 +7255,13 @@ function initAllUploadWidgets() {
         // submit to the dedicated Violations Cloudinary account) — skip it
         // here to avoid double-binding its dropzone events.
         if (widget.querySelector('#violationAttachmentInput')) return;
+        // Approval dropzones accumulate files across multiple picks instead of
+        // replacing the previous selection — wire them separately.
+        if (widget.querySelector('#approvalAttachmentInput') || widget.querySelector('#editApprovalAttachmentInput')) {
+            bindApprovalDropzone(widget);
+            updateUploadWidgetButton(widget);
+            return;
+        }
         bindUploadDropzone(widget);
         updateUploadWidgetButton(widget);
     });

@@ -400,18 +400,30 @@ body.chat-ticket-open .modal-overlay {
     min-width: 0;
 }
 
+/* Messenger-style blue dot unread indicator on the conversation row. */
 .chat-row-unread {
     flex: 0 0 auto;
-    min-width: 18px;
-    height: 18px;
-    padding: 0 5px;
-    border-radius: 9px;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
     background: var(--color-primary);
-    color: #fff;
-    font-size: 0.66rem;
+    box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.7);
+}
+
+/* Unread conversation: bold name and preview, like Messenger. */
+.chat-row.is-unread .chat-row-name {
     font-weight: 700;
-    line-height: 18px;
-    text-align: center;
+    color: var(--text-primary);
+}
+
+.chat-row.is-unread .chat-row-preview {
+    font-weight: 700;
+    color: var(--text-primary);
+}
+
+.chat-row.is-unread .chat-row-time {
+    font-weight: 600;
+    color: var(--text-primary);
 }
 
 /* ⚠️ The floating "New conversation" picker (`.chat-newmenu*`) was removed with

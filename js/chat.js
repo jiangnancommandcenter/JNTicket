@@ -2088,20 +2088,17 @@
         } catch (e) { /* storage disabled — the badge just won't persist */ }
     }
 
-    /** Mark one conversation as read, right now. */
+    /** Mark one conversation as read, right now: reset its unread count. */
     function markConversationRead(roomId) {
         if (!roomId || roomId === LEGACY_ROOM_ID) return;
         const state = readUnreadState();
-        state[roomId] = Date.now();
+        state[roomId] = { count: 0, readAt: Date.now() };
         writeUnreadState(state);
     }
 
     /**
-     * Is this conversation unread for US, and by how much?
-     *
-     * Derived from the room summary we already receive: the conversation is
-     * unread when the last message is from the OTHER person and arrived after
-     * our own "last read" stamp. That needs no extra field and no extra read.
+     * Returns the unread COUNT (not just a boolean) for a conversation,
+     * tracked per-room in localStorage so it persists across refreshes.
      */
     function unreadFor(summary) {
         if (!summary || summary.isArchive) return 0;
@@ -2112,11 +2109,24 @@
         const lastAt = Number(summary.lastMessageAtMs) || 0;
         if (!lastAt) return 0;
         const state = readUnreadState();
-        const readAt = Number(state[summary.roomId]) || 0;
+        const raw = state[summary.roomId];
+        let readAt = 0, count = 1;
+        if (raw) {
+            if (typeof raw === 'object') {
+                readAt = Number(raw.readAt) || 0;
+                count = Number(raw.count) || 1;
+            } else {
+                // Legacy format: raw is a timestamp
+                readAt = Number(raw) || 0;
+            }
+        }
         if (lastAt <= readAt) return 0;
-        // The list cannot know HOW MANY messages arrived without reading the
-        // thread, so the badge shows "new" rather than a fabricated count.
-        return 1;
+        // Always return at least 1 when there is an unread message. The
+        // per-room message watcher may not have run for messages that arrived
+        // while the chat was closed (e.g. before the watcher started, or after
+        // markConversationRead reset the count to 0), so count can be 0 even
+        // though lastMessageAtMs is newer than readAt.
+        return Math.max(1, count);
     }
 
     // ==============================================================
@@ -2348,6 +2358,23 @@
                     if (!sender || sender === me) return;
                     if (roomId === activeRoomId) return;
 
+                    // Increment the unread count so the badge shows how many
+                    // messages arrived while this conversation was closed.
+                    try {
+                        const uKey = 'rcms_chat_unread_' + String(currentUserEmail || 'anon');
+                        const uRaw = localStorage.getItem(uKey);
+                        const uState = uRaw ? JSON.parse(uRaw) : {};
+                        const uEntry = uState[roomId];
+                        let uCount = 0;
+                        if (uEntry && typeof uEntry === 'object') uCount = Number(uEntry.count) || 0;
+                        uState[roomId] = { count: uCount + 1, readAt: (uEntry && typeof uEntry === 'object' ? Number(uEntry.readAt) || 0 : 0) };
+                        localStorage.setItem(uKey, JSON.stringify(uState));
+                    } catch (e) { /* storage disabled — best effort, never fatal */ }
+
+                    // Repaint the conversation list immediately so the unread
+                    // dot and bold styling appear without a page refresh.
+                    try { if (typeof renderConversationList === 'function') renderConversationList(); } catch (e) { /* never break a message arrival */ }
+
                     const msg = Object.assign({ id: id, roomId: roomId }, data);
                     if (mentionsMe(msg)) announceMention(msg);
                     else playIncomingSound();
@@ -2552,9 +2579,10 @@
                 ? escapeHTML(row.lastMessage || 'No messages yet')
                 : 'Tap to start a conversation';
             const unreadAttr = row.unread > 0
-                ? '<span class="chat-row-unread">' + (row.unread > 99 ? '99+' : row.unread) + '</span>'
+                ? '<span class="chat-row-unread" aria-label="Unread"></span>'
                 : '';
-            return '<button type="button" class="chat-row' + (isActive ? ' is-active' : '') + '"' +
+            const rowClass = 'chat-row' + (isActive ? ' is-active' : '') + (row.unread > 0 ? ' is-unread' : '');
+            return '<button type="button" class="' + rowClass + '"' +
                 ' data-room-id="' + escapeHTML(row.roomId) + '"' +
                 ' aria-current="' + (isActive ? 'true' : 'false') + '">' +
                 '<span class="chat-avatar ' + avatarRoleFor(row.peerEmail) + '" aria-hidden="true">' +

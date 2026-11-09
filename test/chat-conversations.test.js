@@ -672,7 +672,7 @@ try {
     //    reachable by keyboard rather than a click-only div.
     assert(/data-room-id="/.test(listEl.innerHTML), 'rows must render into the list element');
         // Three rows are expected: the existing Boss thread, the never-started Second Boss,
-    assert(/chat-row-unread">1</.test(listEl.innerHTML), 'the unread badge must be rendered');
+    assert(/chat-row-unread/.test(listEl.innerHTML), 'the unread blue dot must be rendered');
 
     // --- Search --------------------------------------------------------
     // 4. Search filters by name AND by message text, case-insensitively.
