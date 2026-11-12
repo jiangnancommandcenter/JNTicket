@@ -2191,8 +2191,16 @@ async function ensureBranchGroupChats(approvedEmail, branches, allUsers) {
 //  making a converged pass a pure no-op. Never throws; the auth callback
 //  fires it once per page load (see branchBackfillAttempted).
 // ==============================================================
-async function backfillBranchGroupChats() {
+/** Every branch document the Command Center has loaded (`let branches`). */
+function getAllBranchDocs() {
+    return Array.isArray(branches) ? branches : [];
+}
+
+async function backfillBranchGroupChats(extraBranches) {
     if (!currentUserIsSuperAdmin()) return;   // operators never write rooms
+    // The module-level branch DOCUMENTS (script.js `let branches`), captured
+    // before the local `branches` list below shadows the name.
+    const branchDocs = getAllBranchDocs();
 
     const chat = window.ChatService;
     if (!chat || typeof chat.branchGroupMembers !== 'function' || typeof chat.branchKey !== 'function') return;
@@ -2211,32 +2219,45 @@ async function backfillBranchGroupChats() {
     // "SM Fairview" and "sm fairview" are one store, one room).
     const seen = {};
     const branches = [];
+    const addBranch = function (b) {
+        const raw = String(b || '').trim();
+        if (!raw) return;
+        const key = raw.toLowerCase();
+        if (seen[key]) return;
+        seen[key] = true;
+        branches.push(raw);
+    };
     allUsers.forEach(function (u) {
         if (!u) return;
         const status = String(u.status || 'approved').trim().toLowerCase();
         if (status !== 'approved') return;
         if (!Array.isArray(u.branches)) return;
-        u.branches.forEach(function (b) {
-            const raw = String(b || '').trim();
-            if (!raw) return;
-            const key = raw.toLowerCase();
-            if (seen[key]) return;
-            seen[key] = true;
-            branches.push(raw);
-        });
+        u.branches.forEach(addBranch);
     });
+    // ⚠️ ALSO every branch that EXISTS, and every branch the caller names
+    // (e.g. the ones a user was just moved OUT of). The roster union above
+    // only contains branches somebody is assigned to RIGHT NOW — so when a
+    // store's last Area Manager moved to another branch, that store dropped out
+    // of the sweep and its room kept the moved person in `members` forever.
+    // HR and superadmins are members of EVERY room, so a role change of one of
+    // them (HR -> Area Manager, or a superadmin re-roled in the Firebase
+    // console) needs every room revisited, not just their own branches.
+    branchDocs.forEach(function (b) {
+        addBranch(b && (b.branchName || b.name));
+    });
+    (Array.isArray(extraBranches) ? extraBranches : []).forEach(addBranch);
 
-    for (const branch of branches) {
-        try {
-            // approvedEmail is deliberately null — nobody is being approved
-            // here; the roster alone decides membership (branchGroupMembers
-            // still adds every assigned account plus the superadmins).
-            await ensureBranchGroupChats(null, [branch], allUsers);
-        } catch (error) {
+    // In parallel: each branch is an independent room, and ensureBranchGroupChats
+    // never throws (one failing branch logs and the rest carry on).
+    await Promise.all(branches.map(function (branch) {
+        // approvedEmail is deliberately null — nobody is being approved
+        // here; the roster alone decides membership (branchGroupMembers
+        // still adds every assigned account plus the superadmins).
+        return ensureBranchGroupChats(null, [branch], allUsers).catch(function (error) {
             // One branch failing must never break the backfill or the others.
             console.error('[Chat] branch chat backfill failed for', branch, error);
-        }
-    }
+        });
+    }));
 }
 
 async function updateUserPermissions(email) {
@@ -2316,19 +2337,18 @@ async function updateUserPermissions(email) {
         await ensureBranchGroupChats(null, removedBranches);
     }
 
-    // Remove any locally‑remembered copy of the rooms we just dropped,
-    // so the conversation list sheds them immediately (no need for the
-    // user to clear browser storage or reload).
-    const knownKey = `rcms_chat_known_${lower}`;
-    let known = JSON.parse(localStorage.getItem(knownKey) || '{}');
-    removedBranches.forEach(function (branch) {
-        const roomId = 'chats/branch-' + String(branch).trim().toLowerCase();
-        delete known[roomId];
-    });
-    localStorage.setItem(knownKey, JSON.stringify(known));
-// Forget all remembered conversation rooms so the next snapshot rebuilds
-    // from the new role + branch state (no need for the user to reload or clear cache).
-    localStorage.removeItem(`rcms_chat_known_${lower}`)
+    // ⚠️ THEN EVERY BRANCH ROOM, not only the ticked/unticked ones. HR and
+    // superadmins sit in EVERY branch room without holding those branches, so
+    // a ROLE change (HR -> Area Manager / RM/SM, or back) changes rooms the
+    // diff above never visits — the person stayed a member of every store
+    // chat. The full sweep recomputes each room's `members` from the FRESH
+    // roster. Idempotent: a room already holding the right team is skipped.
+    //
+    // The edited person's OWN browser follows on its own: js/chat.js watches
+    // users/<their email>, reloads on a role/branch change and prunes their
+    // remembered rooms there. (The localStorage cleanup that used to sit here
+    // ran in THIS admin's browser, so it never reached the edited user.)
+    await backfillBranchGroupChats(prevBranches.concat(Array.isArray(detail.branches) ? detail.branches : []));
 }
 
 async function rejectUser(email) {
@@ -6601,15 +6621,26 @@ function renderRevisionAttachments(grid, ticket) {
 }
 
 function renderTicketAttachments(ticket) {
-    const grid = document.getElementById('ticketAttachmentsGrid');
-    if (!grid) return;
-    const attachments = (ticket && Array.isArray(ticket.attachments)) ? ticket.attachments : [];
+    // Two grids, mirroring the Ticket Reviews modal: the requester's own files
+    // (inside the collapsible section) and the operator's resolution files.
+    // The operator grid only exists when the operator card was rendered.
+    const requesterGrid = document.getElementById('ticketRequesterAttachments');
+    const operatorGrid = document.getElementById('ticketAttachmentsGrid');
+    if (!requesterGrid && !operatorGrid) return;
     const ticketId = ticket ? ticket.id : '';
-    if (attachments.length === 0) {
-        grid.innerHTML = '<p style="color:var(--text-muted);font-size:0.85rem;">No attachments.</p>';
-        return;
-    }
-    grid.innerHTML = attachments.map((att, index) => {
+    const split = splitApprovalAttachments(ticket);
+    const emptyHtml = '<p class="review-empty-files">No files available.</p>';
+
+    if (requesterGrid) requesterGrid.innerHTML = split.manager.length > 0 ? renderTiles(split.manager) : emptyHtml;
+    if (operatorGrid) operatorGrid.innerHTML = split.operator.length > 0 ? renderTiles(split.operator) : emptyHtml;
+
+    const requesterCount = document.getElementById('ticketRequesterAttCount');
+    const operatorCount = document.getElementById('ticketOperatorAttCount');
+    if (requesterCount) requesterCount.textContent = '(' + split.manager.length + ')';
+    if (operatorCount) operatorCount.textContent = '(' + split.operator.length + ')';
+
+    function renderTiles(attachments) {
+    return attachments.map((att, index) => {
         // ⚠️ Both writers' shapes are understood here. See normalizeAttachment().
         const norm = normalizeAttachment(att);
         const url = norm ? norm.url : '';
@@ -6666,6 +6697,7 @@ function renderTicketAttachments(ticket) {
             </div>
         `;
     }).join('');
+    }
 }
 
 window.removeTicketAttachment = async function(ticketId, publicId) {
@@ -6685,17 +6717,26 @@ window.removeTicketAttachment = async function(ticketId, publicId) {
         const existing = Array.isArray(data.attachments) ? data.attachments : [];
         const oldRes = data.resolution || {};
         const oldResAtts = Array.isArray(oldRes.attachments) ? oldRes.attachments : [];
+        const oldReqAtts = Array.isArray(data.requesterAttachments) ? data.requesterAttachments : [];
         const remaining = existing.filter(a => a.public_id !== publicId);
         const remainingRes = oldResAtts.filter(a => a.public_id !== publicId);
+        // The requester grid reads `requesterAttachments` directly (see
+        // splitApprovalAttachments), so it must be filtered too or a removed
+        // requester file would keep showing.
+        const remainingReq = oldReqAtts.filter(a => a.public_id !== publicId);
 
         await db.collection('tickets').doc(ticketId).update({
             attachments: remaining,
+            ...(oldReqAtts.length > 0 ? { requesterAttachments: remainingReq } : {}),
             resolutionAttachmentUrl: attachmentUrl(remaining[0]),
             resolution: { ...oldRes, attachments: remainingRes }
         });
 
         const idx = allTickets.findIndex(t => t.id === ticketId);
-        if (idx >= 0) allTickets[idx] = { ...allTickets[idx], attachments: remaining, resolution: { ...oldRes, attachments: remainingRes } };
+        if (idx >= 0) {
+            allTickets[idx] = { ...allTickets[idx], attachments: remaining, resolution: { ...oldRes, attachments: remainingRes } };
+            if (oldReqAtts.length > 0) allTickets[idx].requesterAttachments = remainingReq;
+        }
         renderTicketAttachments(allTickets[idx] || { id: ticketId, attachments: remaining });
         setAttachmentStatus('Attachment removed.', false);
     } catch (e) {
@@ -7343,10 +7384,7 @@ window.openTicketModal = function(id) {
     const resNotes = resolution.notes || ticket.resolutionNotes || '';
     const resBy = resolution.resolvedBy || '';
     const resAt = resolution.resolvedAt?.toDate ? formatDateTime(resolution.resolvedAt.toDate()) : (resolution.resolvedAt || '');
-    const resolutionHTML = (resNotes || resBy || resAt) ? `
-        <div class="modal-field full-width"><label>Resolution Notes</label><span>${escapeHTML(resNotes || '—')}</span></div>
-        ${(resBy || resAt) ? `<div class="modal-field full-width"><label>Resolution Info</label><span>${escapeHTML(resBy ? 'Resolved by ' + resBy : '')}${resAt ? (resBy ? ' on ' : '') + escapeHTML(resAt) : ''}</span></div>` : ''}
-    ` : '';
+    const hasResolution = !!(resNotes || resBy || resAt);
     // ===== Additional Footage Requests (from "Request Additional" on the track page) =====
     const footageNotes = (ticket.comments || []).filter(function(c) { return c && c.type === 'footage_request'; });
     const footageHTML = footageNotes.length ? `
@@ -7364,27 +7402,58 @@ window.openTicketModal = function(id) {
         </div>
     ` : '';
 
-    ticketModalBody.innerHTML = `
-        <div class="modal-section-title"><i class="fas fa-user-circle"></i> Requester Information</div>
-        <div class="modal-field"><label>Branch</label><span>${escapeHTML(ticket.branch || '-')}</span></div>
-        <div class="modal-field"><label>Reporter Name</label><span>${escapeHTML(ticket.name || '-')}</span></div>
-        <div class="modal-field"><label>Position</label><span>${escapeHTML(ticket.position || '-')}</span></div>
-        <div class="modal-field"><label>Contact Number</label><span>${escapeHTML(ticket.contact || '-')}</span></div>
-        <div class="modal-field"><label>Email</label><span>${escapeHTML(ticket.email || '-')}</span></div>
+    // Same split the Ticket Reviews modal uses, so the requester's files and
+    // the operator's resolution files land in their own sections.
+    const split = splitApprovalAttachments(ticket);
+    const showOperatorCard = hasResolution || split.operator.length > 0 || !!rejectionHTML || !!footageHTML;
 
-        <div class="modal-section-title"><i class="fas fa-clipboard-list"></i> Incident Details</div>
-        <div class="modal-field"><label>Ticket Number</label><span>${escapeHTML(ticket.ticketNumber || ticket.id)}</span></div>
-        <div class="modal-field"><label>Incident Date</label><span>${escapeHTML(ticket.datetime || '-')}</span></div>
-        <div class="modal-field"><label>Location</label><span>${escapeHTML(ticket.location || '-')}</span></div>
-        <div class="modal-field"><label>Incident Type</label><span>${escapeHTML(ticket.incident || '-')}</span></div>
-        <div class="modal-field"><label>Priority</label><span>${escapeHTML(ticket.priority || 'Low')}</span></div>
-        <div class="modal-field full-width"><label>Full Description</label><span>${escapeHTML(ticket.description || 'No description.')}</span></div>
-        ${rejectionHTML}
-        ${resolutionHTML}
-        ${footageHTML}
+    ticketModalBody.innerHTML = `
+        <!-- ===== SECTION 1: REQUESTER'S INFORMATION (collapsible, on top) =====
+             Open by default only while there is no resolution yet, so a pending
+             ticket is readable without a click. -->
+        <details class="review-collapse"${hasResolution ? '' : ' open'}>
+            <summary>
+                <span class="review-collapse-title"><i class="fas fa-user-tie"></i> Requester's Information</span>
+                <span class="review-collapse-sub"><i class="fas fa-user-circle"></i> Submitted by ${escapeHTML(ticket.name || '—')}</span>
+                <i class="fas fa-chevron-down review-collapse-caret"></i>
+            </summary>
+            <div class="review-collapse-body">
+                <div class="review-meta-grid">
+                    <div class="review-meta"><label>Ticket Number</label><span>${escapeHTML(ticket.ticketNumber || ticket.id)}</span></div>
+                    <div class="review-meta"><label>Branch</label><span>${escapeHTML(ticket.branch || '-')}</span></div>
+                    <div class="review-meta"><label>Reporter Name</label><span>${escapeHTML(ticket.name || '-')}</span></div>
+                    <div class="review-meta"><label>Position</label><span>${escapeHTML(ticket.position || '-')}</span></div>
+                    <div class="review-meta"><label>Contact Number</label><span>${escapeHTML(ticket.contact || '-')}</span></div>
+                    <div class="review-meta"><label>Email</label><span>${escapeHTML(ticket.email || '-')}</span></div>
+                    <div class="review-meta"><label>Incident Type</label><span>${escapeHTML(ticket.incident || '-')}</span></div>
+                    <div class="review-meta"><label>Incident Date</label><span>${escapeHTML(ticket.datetime || '-')}</span></div>
+                    <div class="review-meta"><label>Location</label><span>${escapeHTML(ticket.location || '-')}</span></div>
+                    <div class="review-meta"><label>Priority</label><span>${escapeHTML(ticket.priority || 'Low')}</span></div>
+                    <div class="review-meta full"><label>Full Description</label><p class="review-note">${escapeHTML(ticket.description || 'No description.')}</p></div>
+                </div>
+                <div class="review-attachments-label"><i class="fas fa-paperclip"></i> Requester's Attachments <span id="ticketRequesterAttCount">(0)</span></div>
+                <div class="attachments-grid" id="ticketRequesterAttachments"></div>
+            </div>
+        </details>
+
+        ${showOperatorCard ? `
+        <!-- ===== SECTION 2: OPERATOR'S RESOLUTION ===== -->
+        <div class="review-card operator">
+            <div class="review-card-header">
+                <h3><i class="fas fa-video"></i> Operator's Resolution</h3>
+                ${resBy ? `<span class="review-card-sub"><i class="fas fa-user-cog"></i> Resolved by ${escapeHTML(resBy)}</span>` : ''}
+            </div>
+            ${rejectionHTML}
+            <div class="review-meta-grid">
+                <div class="review-meta"><label>Resolved By</label><span>${escapeHTML(resBy || '—')}</span></div>
+                <div class="review-meta"><label>Resolved At</label><span>${escapeHTML(resAt || '—')}</span></div>
+                <div class="review-meta full"><label>Resolution Notes</label><p class="review-note">${escapeHTML(resNotes || '—')}</p></div>
+            </div>
+            ${footageHTML}
+            <div class="review-attachments-label"><i class="fas fa-film"></i> Operator's Resolution Attachments <span id="ticketOperatorAttCount">(0)</span></div>
+            <div class="attachments-grid" id="ticketAttachmentsGrid"></div>
+        </div>` : ''}
     `;
-    const attachmentsSection = document.getElementById('ticketAttachmentsSection');
-    if (attachmentsSection) attachmentsSection.style.display = '';
 
     renderTicketAttachments(ticket);
     ticketModal.classList.add('active');
@@ -9195,6 +9264,14 @@ window.goToViolationPage = function(page) {
 
 // ===== VIOLATION DETAILS MODAL =====
 
+/** True for evidence uploaded through Edit Violation after first submission.
+ *  Delegates to the shared helper so all three dashboards agree. */
+function isViolationAddedAttachment(att) {
+    const h = window.AttachmentViewer && window.AttachmentViewer.helpers;
+    if (h && typeof h.isAddedAttachment === 'function') return h.isAddedAttachment(att);
+    return !!(att && att.addedAfterSubmit);
+}
+
 function renderViolationAttachments(grid, attachments, editable) {
     if (!grid) return;
     const list = Array.isArray(attachments) ? attachments : [];
@@ -9235,8 +9312,17 @@ function renderViolationAttachments(grid, attachments, editable) {
             ? `<div class="attachment-preview" title="Link unavailable">${preview}</div>`
             : `<a href="${url}" target="_blank" rel="noopener noreferrer" class="attachment-preview" title="${escapeHTML(name)}">${preview}</a>`;
 
+        // Evidence added after the first submission (Edit Violation) gets the
+        // same green outline + NEW banner as ticket "added footage". Badge is
+        // top-left, the remove (×) button top-right, so both can show at once.
+        const isAdded = isViolationAddedAttachment(att);
+        const addedBadge = isAdded
+            ? '<span class="attachment-added-badge" role="img" aria-label="Added footage" title="Added after the report was submitted">NEW</span>'
+            : '';
+
         return `
-            <div class="attachment-item" data-public-id="${escapeHTML(publicId)}">
+            <div class="attachment-item${isAdded ? ' attachment-item--added' : ''}" data-public-id="${escapeHTML(publicId)}">
+                ${addedBadge}
                 ${removeBtn}
                 ${body}
                 <div class="attachment-meta">
@@ -9388,6 +9474,10 @@ function openViolationFormModal(id) {
         if (violationLocationInput) violationLocationInput.value = v.location || '';
         if (violationDetailsInput) violationDetailsInput.value = v.details || '';
         violationEditAttachments = Array.isArray(v.attachments) ? v.attachments.slice() : [];
+        // Show the existing evidence files in the edit form's file list, each
+        // with a remove (x) button, so the superadmin can see what is on file
+        // and drop individual attachments before saving.
+        renderViolationEditFileList();
     } else {
         currentViolationId = null;
         if (violationFormTitle) violationFormTitle.textContent = 'Report Violation';
@@ -9407,6 +9497,43 @@ function closeViolationFormModal() {
 function removeViolationEditAttachment(publicId) {
     violationEditAttachments = violationEditAttachments.filter(a => (a.public_id || '') !== publicId);
     renderViolationAttachments(violationAttachmentsGrid, violationEditAttachments, true);
+    renderViolationEditFileList();
+}
+
+/** Render the existing (pre-uploaded) attachments of the violation being edited
+ * into the form's file list, each with a remove (x) button on top. */
+function renderViolationEditFileList() {
+    const widget = violationUploadWidget;
+    if (!widget) return;
+    const listEl = widget.querySelector('.upload-file-list');
+    if (!listEl) return;
+    const arr = violationEditAttachments.map((att, i) => {
+        const n = normalizeAttachment(att);
+        return { name: (n && n.name) || 'Attachment', size: (n && n.bytes) || 0, added: isViolationAddedAttachment(att) };
+    });
+    if (arr.length === 0) { listEl.innerHTML = ''; return; }
+    listEl.innerHTML = arr.map((f, i) => `
+        <div class="upload-file-item${f.added ? ' upload-file-item--added' : ''}" data-index="${i}">
+            <i class="fas fa-file-alt"></i>
+            <span class="upload-file-name" title="${escapeHTML(f.name)}">${escapeHTML(f.name)}</span>
+            ${f.added ? '<span class="upload-file-new-tag" title="Added after the report was submitted">NEW</span>' : ''}
+            <span class="upload-file-size">${formatFileSize(f.size)}</span>
+            <button type="button" class="upload-file-remove" data-index="${i}" title="Remove">
+                <i class="fas fa-times"></i>
+            </button>
+        </div>
+    `).join('');
+    listEl.querySelectorAll('.upload-file-remove').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            const index = parseInt(btn.dataset.index, 10);
+            if (!Number.isNaN(index)) {
+                violationEditAttachments.splice(index, 1);
+                renderViolationEditFileList();
+            }
+        });
+    });
 }
 
 function showViolationFormWarning(message) {
@@ -9519,7 +9646,15 @@ async function saveViolationForm(e) {
                         violationUploadStatus.textContent = `Uploading ${i + 1} of ${files.length}…`;
                     }
                 });
-                uploaded.push(att);
+                // ⚠️ STAMP FILES ADDED THROUGH EDIT VIOLATION. An edit-time upload
+                // is additional evidence (typically footage / another angle the
+                // Area Manager asked for), so it is flagged on the record itself.
+                // Every viewer (operator, Area Manager, HR) reads this flag via
+                // AttachmentViewer.helpers.isAddedAttachment() and draws the green
+                // outline + NEW banner. Original uploads (new report) stay unflagged.
+                uploaded.push(editId
+                    ? Object.assign({}, att, { addedAfterSubmit: true, addedAt: new Date().toISOString() })
+                    : att);
             }
             const existing = editId ? violationEditAttachments.slice() : [];
             await firestoreService.updateViolation(reportId, {

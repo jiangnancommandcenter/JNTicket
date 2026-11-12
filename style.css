@@ -5054,6 +5054,25 @@ branch name, let alone pick one. */
    Flush to the corner (0,0), not inset: .attachment-item has `overflow: hidden`,
    so the card's own rounded corner clips the banner into the corner shape for
    free. Any inset would show the card's background behind it. */
+/* Edit Violation form: existing files that were added after the report was
+   first submitted. Same green as the card outline + NEW banner above. */
+.upload-file-item--added {
+    border-left: 3px solid var(--color-primary);
+    background: var(--color-primary-bg);
+}
+.upload-file-new-tag {
+    flex-shrink: 0;
+    padding: 2px 7px;
+    border-radius: 999px;
+    background: var(--color-primary);
+    color: #fff;
+    font-size: 0.6rem;
+    font-weight: 800;
+    letter-spacing: 0.6px;
+    line-height: 1.4;
+    text-transform: uppercase;
+}
+
 .attachment-added-badge {
     position: absolute;
     /* TOP-LEFT: .attachment-remove already owns top-right, and a superadmin's

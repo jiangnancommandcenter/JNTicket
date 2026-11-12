@@ -385,6 +385,11 @@ body.chat-ticket-open .modal-overlay {
     text-overflow: ellipsis;
 }
 
+/* Unread conversation: bolder name so it stands out in the branch list. */
+.chat-row.has-unread .chat-row-name {
+    font-weight: 700;
+}
+
 .chat-row-time {
     flex: 0 0 auto;
     font-size: 0.68rem;
@@ -400,30 +405,18 @@ body.chat-ticket-open .modal-overlay {
     min-width: 0;
 }
 
-/* Messenger-style blue dot unread indicator on the conversation row. */
 .chat-row-unread {
     flex: 0 0 auto;
-    width: 8px;
-    height: 8px;
-    border-radius: 50%;
+    min-width: 18px;
+    height: 18px;
+    padding: 0 5px;
+    border-radius: 9px;
     background: var(--color-primary);
-    box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.7);
-}
-
-/* Unread conversation: bold name and preview, like Messenger. */
-.chat-row.is-unread .chat-row-name {
+    color: #fff;
+    font-size: 0.66rem;
     font-weight: 700;
-    color: var(--text-primary);
-}
-
-.chat-row.is-unread .chat-row-preview {
-    font-weight: 700;
-    color: var(--text-primary);
-}
-
-.chat-row.is-unread .chat-row-time {
-    font-weight: 600;
-    color: var(--text-primary);
+    line-height: 18px;
+    text-align: center;
 }
 
 /* ⚠️ The floating "New conversation" picker (`.chat-newmenu*`) was removed with
@@ -736,6 +729,15 @@ body.chat-ticket-open .modal-overlay {
 .chat-msg-grouped .chat-msg-bubble {
     border-top-left-radius: 6px;
     border-top-right-radius: 6px;
+}
+
+/* ---- Unread message indicator (Messenger-style bold) ---- */
+/* Messages from someone else that arrived after this user last opened the
+   chat render with a heavier bubble so unread items stand out at a glance.
+   Cleared once the chat is opened (updateUnreadFrom bails while active). */
+.chat-msg--unread .chat-msg-bubble {
+    font-weight: 700;
+    color: var(--text-primary, #111827);
 }
 
 /* ---- Read receipts: the ✓ Sent / ✓✓ Seen ticks ----

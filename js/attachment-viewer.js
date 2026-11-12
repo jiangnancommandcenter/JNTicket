@@ -570,6 +570,19 @@ function buildAttachmentPreview(norm, index) {
             + (isBroken ? '<span class="attachment-size" style="color:#dc2626;">link unavailable</span>' : '')
             + '</div></div>';
     }
+
+    /**
+     * Was this violation evidence added AFTER the report was first submitted
+     * (i.e. uploaded through Edit Violation, typically because an Area Manager
+     * asked for more footage / another angle)? The flag is stamped onto the
+     * attachment record itself by saveViolationForm() in script.js, so it
+     * travels with the file — through renames, transfers, and every viewer.
+     * Permanent by design: original evidence and added evidence stay
+     * distinguishable for the life of the report.
+     */
+    function isAddedAttachment(att) {
+        return !!(att && att.addedAfterSubmit);
+    }
     // The ONLY global this module creates. Everything else stays private so it
     // cannot collide with the globals script.js and owner-dashboard.js each
     // declare (test/script-collision.test.js guards exactly that).
@@ -590,7 +603,8 @@ function buildAttachmentPreview(norm, index) {
             getAttachmentIcon: getAttachmentIcon,
             getAttachmentColor: getAttachmentColor,
             formatFileSize: formatFileSize,
-            escapeHTML: escapeHTML
+            escapeHTML: escapeHTML,
+            isAddedAttachment: isAddedAttachment
         },
         // Exposed for tests; not part of the page-facing API.
         _internals: {

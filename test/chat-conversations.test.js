@@ -641,12 +641,15 @@ try {
         'the group chat must be listed for everybody — a new HR or superadmin account is in it ' +
         'automatically, so the row can never depend on a summary having arrived'
     );
-    assert.strictEqual(
-        rows[rows.length - 1].name,
-        'All HR — group chat',
-        'the group chat must be pinned last so a busy list cannot bury it'
-    );
     assert.strictEqual(rows[0].name, 'Boss', 'the list must be ordered by most recent activity');
+    // Like iMessage / Messenger: unread conversations first, then newest activity.
+    // The group chat must NOT be pinned last — it bubbles up by recency.
+    const groupIdx = names.indexOf('All HR — group chat');
+    const secondBossIdx = names.indexOf('Second Boss');
+    assert(
+        groupIdx < secondBossIdx,
+        'the group chat (lastMessageAt 1s) must rank above a never-started conversation (0s)'
+    );
 
     const bossRow = rows.filter((r) => r.roomId === roomBoss)[0];
     // Unread is a per-device BOOLEAN derived from localStorage, not a server
@@ -672,7 +675,7 @@ try {
     //    reachable by keyboard rather than a click-only div.
     assert(/data-room-id="/.test(listEl.innerHTML), 'rows must render into the list element');
         // Three rows are expected: the existing Boss thread, the never-started Second Boss,
-    assert(/chat-row-unread/.test(listEl.innerHTML), 'the unread blue dot must be rendered');
+    assert(/chat-row-unread">1</.test(listEl.innerHTML), 'the unread badge must be rendered');
 
     // --- Search --------------------------------------------------------
     // 4. Search filters by name AND by message text, case-insensitively.
@@ -1485,13 +1488,18 @@ try {
     );
     // The GROUP chat is a channel everybody is in from the start, so its row
     // cannot depend on a summary arriving — at this point in the test no group
-    // summary has ever been reported.
-    const groupRow = Live.conversationRows()[Live.conversationRows().length - 1];
+    // summary has ever been reported. Like iMessage / Messenger it is sorted
+    // by recency with everything else, not pinned to a fixed position.
+    const groupRow = Live.conversationRows().find((r) => r.roomId === 'owner-superadmin');
+    assert(
+        groupRow,
+        'the group chat must be listed even with no summary at all — a new HR or superadmin account is ' +
+        'in it by ROLE, and nobody has to be added to anything'
+    );
     assert.strictEqual(
         groupRow.roomId,
         'owner-superadmin',
-        'the group chat must be listed even with no summary at all — a new HR or superadmin account is ' +
-        'in it by ROLE, and nobody has to be added to anything'
+        'the group chat row must carry the legacy room id'
     );
 
     // --- A DEPLOYED MESSAGE RULE OLDER THAN THE CLIENT ------------------

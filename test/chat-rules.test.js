@@ -424,11 +424,11 @@ assert(
     'reactions must be readable by the room so counts resolve'
 );
 assert(
-    /allow create: if isChatMember\(chatId\)[\s\S]*?request\.resource\.data\.email == selfEmail\(\)/.test(reactionsBlock),
+    /allow create: if \(isChatMember\(chatId\) \|\| isLegacyArchive\(chatId\)\)[\s\S]*?request\.resource\.data\.email == selfEmail\(\)/.test(reactionsBlock),
     'a reaction create must require room membership AND email == selfEmail(), or anyone could react as a colleague'
 );
 assert(
-    /allow delete: if isChatMember\(chatId\)\s*\r?\n\s*&& resource\.data\.email == selfEmail\(\);/.test(reactionsBlock),
+    /allow delete: if \(isChatMember\(chatId\) \|\| isLegacyArchive\(chatId\)\)\s*\r?\n\s*&& resource\.data\.email == selfEmail\(\);/.test(reactionsBlock),
     'a reaction delete must be restricted to its owner (resource.data.email)'
 );
 assert(
@@ -440,11 +440,11 @@ assert(
 // frozen, so a reaction cannot be moved to another message or handed to
 // another person after the fact.
 assert(
-    /allow update: if isChatMember\(chatId\)[\s\S]*?affectedKeys\(\)\.hasOnly\(\['emoji'\]\)/.test(reactionsBlock),
+    /allow update: if \(isChatMember\(chatId\) \|\| isLegacyArchive\(chatId\)\)[\s\S]*?affectedKeys\(\)\.hasOnly\(\['emoji'\]\)/.test(reactionsBlock),
     'a reaction update must be restricted to the `emoji` field — messageId and email must be frozen'
 );
 assert(
-    /allow update: if isChatMember\(chatId\)[\s\S]*?resource\.data\.email == selfEmail\(\)/.test(reactionsBlock),
+    /allow update: if \(isChatMember\(chatId\) \|\| isLegacyArchive\(chatId\)\)[\s\S]*?resource\.data\.email == selfEmail\(\)/.test(reactionsBlock),
     'a reaction update must be restricted to its owner (resource.data.email)'
 );
 assert(
@@ -1215,9 +1215,8 @@ assert(
     'first, so the label matches the row, the header and the messages'
 );
 assert(
-    /function toggleReaction\([\s\S]{0,700}?if \(isGroupRoom\(\)\) \{[\s\S]{0,300}?only available in 1:1/.test(clientSrc),
-    'a reaction is a per-room membership write too: it must be refused in the client with a plain ' +
-    'explanation, not by letting the rules reject it'
+    !/if \(isGroupRoom\(\)\) \{[\s\S]{0,200}?only available in 1:1/.test(clientSrc),
+    'a reaction must no longer be refused in the client just because the room is a group — membership rules allow them now'
 );
 assert(
     /roomPreviewInBatch && !isGroupRoom\(\)/.test(clientSrc),

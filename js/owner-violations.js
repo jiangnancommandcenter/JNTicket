@@ -414,7 +414,10 @@
             return;
         }
         attachmentsGrid.innerHTML = list.map(function (att, i) {
-            return view.buildAttachmentCard(att, { index: i });
+            // Files the operator added after submission (e.g. extra footage the
+            // manager asked for) get the green outline + NEW banner.
+            const added = !!(view.helpers && view.helpers.isAddedAttachment && view.helpers.isAddedAttachment(att));
+            return view.buildAttachmentCard(att, { index: i, added: added });
         }).join('');
     }
 

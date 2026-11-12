@@ -1277,16 +1277,12 @@
                 <button class="modal-close" id="closeTicketModal">&times;</button>
             </div>
             <div class="modal-body">
-                <div class="modal-fields" id="ticketModalBody">
+                <!-- ===== Two-section layout (same as Ticket Reviews): collapsible
+                     Requester's Information on top, Operator's Resolution below.
+                     Both sections and their attachment grids are built by
+                     openTicketModal() / renderTicketAttachments() in script.js. ===== -->
+                <div class="approval-review-grid" id="ticketModalBody">
                     <p style="color:var(--text-muted);">Loading...</p>
-                </div>
-
-<!-- ===== Submitted Files (images/videos from the requester) ===== -->
-                <div class="ticket-attachments-section" id="ticketAttachmentsSection" style="margin-top:22px;">
-                    <h3 class="section-title"><i class="fas fa-paperclip"></i> Submitted Files <span style="font-weight:400;text-transform:none;font-size:0.8rem;color:var(--text-muted);">(images &amp; videos uploaded by the requester)</span></h3>
-                    <div id="ticketAttachmentsGrid" class="attachments-grid">
-                        <p class="u-section-sub">No attachments yet.</p>
-                    </div>
                 </div>
             </div>
         </div>

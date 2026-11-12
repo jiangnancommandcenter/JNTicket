@@ -219,7 +219,38 @@ service cloud.firestore {
     function isChatMember(chatId) {
       return isChatRole() &&
         exists(/databases/$(database)/documents/chats/$(chatId)) &&
-        selfEmail() in chatRoom(chatId).data.members;
+        selfEmail() in chatRoom(chatId).data.members &&
+        (!isBranchRoom(chatId) || hasCurrentBranchAccess(chatId));
+    }
+
+    // ⚠️ BRANCH ROOMS FOLLOW THE CALLER'S *CURRENT* ROLE + BRANCHES, not just
+    // the room's `members` array. `members` is a SNAPSHOT written by the
+    // superadmin's client (script.js ensureBranchGroupChats / the backfill
+    // sweep), so it can lag behind a role or branch change — e.g. a role edited
+    // in the Firebase console, or HR re-saved as an Area Manager. Without this,
+    // a stale entry kept that person reading and posting in a branch they no
+    // longer belong to. Messages are NEVER deleted; access is simply refused
+    // until the user is (re)assigned.
+    //
+    //   superadmin, hr   -> every branch room (company-wide by spec)
+    //   owner, rmsm      -> only rooms whose `title` (the branch name) is in
+    //                       their own users/<email>.branches right now
+    //
+    // `title.lower()` is the second chance for a branch name stored in a
+    // different case. Only used through isChatMember(), i.e. on DOCUMENT
+    // reads/writes whose chatId is known — never on the conversation LIST
+    // query, which Firestore could not prove against a title condition (that
+    // clause stays membership-only, below; the client filters it — js/chat.js
+    // canAccessBranchRoom()).
+    function myBranches() {
+      return get(/databases/$(database)/documents/users/$(selfEmail())).data.get('branches', []);
+    }
+    function hasCurrentBranchAccess(chatId) {
+      let role = myRole();
+      let title = chatRoom(chatId).data.get('title', '');
+      return role in ['superadmin', 'hr']
+        || (role in ['owner', 'rmsm']
+            && (title in myBranches() || title.lower() in myBranches()));
     }
 
     // The LEGACY room, which is now the ALL HR GROUP CHAT. It predates
@@ -789,8 +820,12 @@ allow read: if canReadChat(chatId)
       match /reactions/{reactionId} {
         allow read: if canReadChat(chatId);
 
-        // A person may only ever react AS THEMSELVES.
-        allow create: if isChatMember(chatId)
+        // A person may only ever react AS THEMSELVES. In the 1:1 rooms that
+        // pass `isChatMember`, plus the All HR group chat (`isLegacyArchive`,
+        // role-gated HR/superadmin, no `members` array). Branch group rooms
+        // already pass `isChatMember` through their seeded `members` list, so
+        // they are covered by the membership half alone.
+        allow create: if (isChatMember(chatId) || isLegacyArchive(chatId))
           && request.resource.data.keys().hasOnly(['messageId', 'emoji', 'email'])
           && request.resource.data.email == selfEmail()
           && request.resource.data.messageId is string
@@ -802,13 +837,13 @@ allow read: if canReadChat(chatId)
         //  an update of the `emoji` field only. The rule below permits exactly
         //  that and nothing else: `messageId` and `email` are frozen, so a
         //  reaction can never be repointed at another message or person.)
-        allow update: if isChatMember(chatId)
+        allow update: if (isChatMember(chatId) || isLegacyArchive(chatId))
           && resource.data.email == selfEmail()
           && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['emoji'])
           && request.resource.data.keys().hasOnly(['messageId', 'emoji', 'email']);
 
         // You may only remove your OWN reaction.
-        allow delete: if isChatMember(chatId)
+        allow delete: if (isChatMember(chatId) || isLegacyArchive(chatId))
           && resource.data.email == selfEmail();
       }
     }
