@@ -14,7 +14,7 @@
 // CDN changes nothing the user hears.
 const NOTIFICATION_SOUND_URL = 'sounds/notify.mp3';
 const NOTIFICATION_SOUND_FALLBACK_URL = 'https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3';
-const NOTIFICATION_ICON_URL = 'tamang logo.png';
+const NOTIFICATION_ICON_URL = 'tamang-logo-192.png';
 let notificationAudio = null;
 
 function preloadNotificationSound() {

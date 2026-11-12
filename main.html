@@ -13,8 +13,8 @@
     <!-- App icon + installable manifest. theme_color is a fixed brand green:
          dark mode here is OPT-IN (see README), so prefers-color-scheme would
          disagree with the actual UI. ThemeManager keeps the meta in sync. -->
-    <link rel="icon" href="tamang logo.png" type="image/png">
-    <link rel="apple-touch-icon" href="tamang logo.png">
+    <link rel="icon" href="tamang-logo-64.png" type="image/png">
+    <link rel="apple-touch-icon" href="tamang-logo-180.png">
     <link rel="manifest" href="manifest.json">
     <meta name="theme-color" id="themeColorMeta" content="#72bf6a">
 
@@ -26,10 +26,6 @@
     <link rel="preconnect" href="https://www.gstatic.com" crossorigin>
     <link rel="preconnect" href="https://firestore.googleapis.com" crossorigin>
     <link rel="preconnect" href="https://securetoken.googleapis.com" crossorigin>
-    <!-- Chart.js -->
-    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
-    <!-- jsPDF: generates the downloadable "COMMAND CENTER REPORT" PDF (violation reports) -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <!-- Firebase SDKs -->
 
     <!-- Custom Styles -->
@@ -47,27 +43,9 @@
          (style.css / theme.css), and those blocks are hidden on desktop
          anyway. Verified: no class name in the current markup collides
          with a Tailwind utility. -->
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script>
-        tailwind.config = {
-            darkMode: 'class',
-            corePlugins: { preflight: false },
-            theme: {
-                extend: {
-                    colors: {
-                        jn: {
-                            green: '#2e7d32',
-                            lightGreen: '#4caf50',
-                            accentGreen: '#e8f5e9',
-                            darkBg: '#0f172a',
-                            darkCard: '#1e293b',
-                            darkHeader: '#0f172a'
-                        }
-                    }
-                }
-            }
-        };
-    </script>
+    <!-- ⚡ PERF: Tailwind is PREBUILT (tailwind.css, linked at the end of <head>
+         where the Play CDN used to inject its styles). Config: tailwind.config.js.
+         Rebuild after adding Tailwind classes: npm run build:css -->
 
     <!-- The app stores dark/light in data-theme (js/theme.js), while the
          pasted blocks use Tailwind's `dark:` variant, which keys off the
@@ -160,6 +138,7 @@
         }
     </style>
 
+    <link rel="stylesheet" href="tailwind.css">
 </head>
 <body>
 
@@ -1902,6 +1881,12 @@
     <!-- ============================================================ -->
     <!-- SCRIPTS                                                       -->
     <!-- ============================================================ -->
+    <!-- ⚡ PERF: Chart.js + jsPDF moved here from <head> so they no longer block first paint.
+         Still loaded before every app script, so nothing that uses them changes. -->
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+    <!-- jsPDF: generates the downloadable "COMMAND CENTER REPORT" PDF (violation reports) -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-firestore.js"></script>
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-auth.js"></script>
@@ -1940,6 +1925,9 @@
          initApp(). The dialog markup is INJECTED by the module, so this
          page deliberately has no <div> for it any more. -->
     <script src="js/attachment-viewer.js"></script>
+    <!-- Violation video compressor (videos > 15 MB). Tiny loader only; the
+         encoder library itself is fetched on first use. Before script.js. -->
+    <script src="js/video-compressor.js"></script>
     <script src="script.js?v=branch-backfill-2"></script>
     <!-- ===== HR uploads presence tracker (superadmin dashboard) ====
          Loaded AFTER script.js so window.HrUploads exists when violations

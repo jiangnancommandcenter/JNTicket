@@ -240,8 +240,14 @@ const firestoreService = {
     /**
      * Listen to real-time ticket updates
      */
-    listenTickets(callback, onError = null) {
-        return db.collection('tickets').onSnapshot(
+    listenTickets(callback, onError = null, options = null) {
+        // `options` (optional) is passed straight to onSnapshot, e.g.
+        // { includeMetadataChanges: true } so a caller can tell a cache snapshot
+        // from a server one via the 3rd callback argument (snapshot.metadata).
+        const query = db.collection('tickets');
+        const args = options ? [options] : [];
+        return query.onSnapshot(
+            ...args,
             (snapshot) => {
                 const tickets = [];
                 snapshot.forEach((doc) => {
@@ -252,7 +258,7 @@ const firestoreService = {
                     const bTime = b.createdAt?.toDate?.()?.getTime() || 0;
                     return bTime - aTime;
                 });
-                callback(tickets, snapshot.docChanges());
+                callback(tickets, snapshot.docChanges(), snapshot.metadata);
             },
             (error) => {
                 console.error('🔥 Firestore ticket listener error:', error);

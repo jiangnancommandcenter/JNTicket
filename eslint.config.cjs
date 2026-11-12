@@ -1,7 +1,8 @@
 module.exports = [
   {
     files: ['**/*.js'],
-    ignores: ['node_modules/**'],
+    // js/vendor/ holds unmodified third-party bundles (e.g. Mediabunny) — not ours to lint.
+    ignores: ['node_modules/**', 'js/vendor/**'],
     languageOptions: {
       ecmaVersion: 2021,
       sourceType: 'module'

@@ -1109,7 +1109,14 @@ auth.onAuthStateChanged(async (user) => {
         // data (branch status) still shows. This idempotently re-runs the ticket
         // loader now that we are authenticated. It no-ops on desktop where the
         // initial load already succeeded.
-        if (isInitialTicketLoad || allTickets.length === 0) {
+        // ⚡ PERF: only re-read when the live listener was actually rejected.
+        // A healthy listener already delivers the full list (and keeps it live),
+        // so the old unconditional full download here was a duplicate read.
+        // A rejected listener is restarted (not replaced by a one-off read) so
+        // the list also stays live afterwards.
+        if (ticketListenerFailed) {
+            await setupTicketListener();
+        } else if (!ticketListenerActive && (isInitialTicketLoad || allTickets.length === 0)) {
             await loadTicketsDirect();
         }
 
@@ -1366,8 +1373,12 @@ async function initApp() {
         const violationsReady = setupViolationListener();
         // Auto-revert runs on its own 5-second timer, independent of snapshots.
         startAutoRevertTimer();
-        setupTicketListener();
-        const ticketsReady = loadTicketsDirect();
+        // ⚡ PERF: the live listener is now the ONLY initial ticket read. It used
+        // to be paired with loadTicketsDirect(), a second full server download
+        // of the whole tickets collection on every page load. The listener
+        // resumes from the offline cache and only fetches changes, so
+        // `ticketsReady` resolves from its first usable snapshot instead.
+        const ticketsReady = setupTicketListener();
 
         // ===== Instant branch paint from cache, then reconcile from server =====
         await paintBranchesFromCache();
@@ -1521,37 +1532,72 @@ async function loadBranchData() {
             branches = await firestoreService.getBranches();
         }
 
-        // ⚠️ PARALLEL, not one-at-a-time. This used to be a `for` loop with an
-        // `await` on every getBranchLogs() + setBranch() — i.e. 2×(branch count)
-        // SERIALIZED network round-trips before initApp() could move on to
-        // anything else. With many branches that alone delayed the violations
-        // table (registered afterwards) by seconds on refresh. The per-branch
-        // work is independent, so it all runs concurrently.
-        await Promise.all(branches.map(async (branch) => {
-            const logs = await firestoreService.getBranchLogs(branch.branchName);
-            if (logs.length > 0) {
-                const latest = logs[0];
-                const updateData = {
-                    currentStatus: latest.status,
-                    lastUpdated: latest.dateTime,
-                    remarks: latest.remarks || branch.remarks || ''
-                };
-                if (latest.status === 'Offline') {
-                    updateData.currentDowntimeStart = latest.dateTime;
-                } else {
-                    updateData.currentDowntimeStart = null;
-                }
-                await firestoreService.setBranch(branch.branchName, updateData);
-                branch.currentStatus = latest.status;
-                branch.lastUpdated = latest.dateTime;
-                branch.currentDowntimeStart = updateData.currentDowntimeStart;
-                branch.remarks = updateData.remarks;
-            }
-        }));
+        await syncBranchStatusesFromLogs();
     } catch (error) {
         console.error('Error loading branch data:', error);
         console.log('Failed to load branch data.');
     }
+}
+
+/**
+ * Derive each branch's current status from its newest status log and persist
+ * it onto the branch document.
+ *
+ * ⚡ PERF: this used to call getBranchLogs() once PER BRANCH — re-downloading
+ * every status log a second time (allLogs already holds the whole collection,
+ * sorted newest-first, in the same document order), plus an unconditional
+ * setBranch() write per branch on every page load. It now reads the newest log
+ * per branch from allLogs in memory (identical result, zero extra reads) and
+ * only writes a branch document when its stored status actually differs.
+ */
+async function syncBranchStatusesFromLogs() {
+    const latestByBranch = new Map();
+    for (const log of allLogs) {
+        if (log && log.branchName && !latestByBranch.has(log.branchName)) {
+            latestByBranch.set(log.branchName, log);
+        }
+    }
+    const tsMillis = (v) => (v && typeof v.toMillis === 'function') ? v.toMillis()
+        : (v && typeof v.toDate === 'function') ? v.toDate().getTime() : (v == null ? null : v);
+
+    await Promise.all(branches.map(async (branch) => {
+        const latest = latestByBranch.get(branch.branchName);
+        if (!latest) return;
+        const updateData = {
+            currentStatus: latest.status,
+            lastUpdated: latest.dateTime,
+            remarks: latest.remarks || branch.remarks || '',
+            currentDowntimeStart: latest.status === 'Offline' ? latest.dateTime : null
+        };
+        const unchanged = branch.currentStatus === updateData.currentStatus
+            && tsMillis(branch.lastUpdated) === tsMillis(updateData.lastUpdated)
+            && (branch.remarks || '') === updateData.remarks
+            && tsMillis(branch.currentDowntimeStart == null ? null : branch.currentDowntimeStart)
+                === tsMillis(updateData.currentDowntimeStart);
+        if (!unchanged) {
+            await firestoreService.setBranch(branch.branchName, updateData);
+        }
+        branch.currentStatus = updateData.currentStatus;
+        branch.lastUpdated = updateData.lastUpdated;
+        branch.currentDowntimeStart = updateData.currentDowntimeStart;
+        branch.remarks = updateData.remarks;
+    }));
+}
+
+/**
+ * After a successful status-log edit/delete: keep allLogs newest-first (an edit
+ * can move a log in time), re-derive branch statuses, and repaint — the same
+ * end state the old full loadBranchData() reload produced, without the reads.
+ */
+function refreshBranchStatusesLocally() {
+    const t = (l) => l?.dateTime?.toDate?.()?.getTime() || 0;
+    allLogs.sort((a, b) => t(b) - t(a));
+    return syncBranchStatusesFromLogs()
+        .catch((e) => console.error('Branch status sync error:', e))
+        .then(() => {
+            renderDashboard();
+            renderBranchesTable();
+        });
 }
 
 async function loadSuperadminUsers() {
@@ -3524,10 +3570,9 @@ if (editHistoryForm) {
                 dateTime: dateTime.toISOString(),
                 remarks
             });
-            loadBranchData().then(() => {
-                renderDashboard();
-                renderBranchesTable();
-            });
+            // ⚡ PERF: re-derive branch status from the patched in-memory logs
+            // instead of re-downloading every branch + every status log.
+            refreshBranchStatusesLocally();
         } catch (error) {
             console.error('Edit history error:', error);
             console.log('Failed to update record on server.');
@@ -3560,10 +3605,8 @@ window.deleteHistoryLog = async function(logId) {
 
     try {
         await firestoreService.deleteStatusLog(logId);
-        loadBranchData().then(() => {
-            renderDashboard();
-            renderBranchesTable();
-        });
+        // ⚡ PERF: same as edit — no full reload after a successful delete.
+        refreshBranchStatusesLocally();
     } catch (error) {
         console.error('Delete history error:', error);
         console.log('Failed to delete record on server.');
@@ -3948,35 +3991,67 @@ async function loadViewHistory(branchName) {
 //  TICKET SYSTEM - REAL-TIME LISTENER
 // ==============================================================
 
+// ⚡ PERF state for the single ticket read path (see setupTicketListener).
+let ticketListenerActive = false;   // a listener is subscribed and has not errored
+let ticketListenerFailed = false;   // the last listener was rejected (e.g. pre-auth)
+let ticketDesktopNotificationsInit = false;
+let unsubscribeTickets = null;
+
+/**
+ * Live ticket listener — the ONLY initial ticket read on page load.
+ *
+ * Returns a promise that resolves once the list is usable: the first snapshot
+ * that came from the server, a non-empty snapshot from the offline cache (instant
+ * paint), an error, or a 10s safety timeout (offline first visit) — so initApp()
+ * never hangs waiting on it.
+ *
+ * Initial-sync rule (replaces the old duplicate getTickets() race): every
+ * snapshot up to and including the FIRST SERVER snapshot replaces the list
+ * wholesale and raises NO "new ticket" / status notifications — exactly what
+ * the old direct read achieved by pre-filling allTickets. `includeMetadataChanges`
+ * lets us see the cache→server transition even when nothing changed.
+ */
 function setupTicketListener() {
-    let isFirstSnapshot = true;
+    let initialSyncDone = false;
+    let resolveReady;
+    const ready = new Promise((resolve) => { resolveReady = resolve; });
+    const markReady = () => { if (resolveReady) { resolveReady(); resolveReady = null; } };
+    setTimeout(markReady, 10000);
 
     // ===== Real Desktop Notifications (like YouTube/Slack) =====
-    if (typeof window.initDesktopNotifications === 'function') {
+    if (!ticketDesktopNotificationsInit && typeof window.initDesktopNotifications === 'function') {
+        ticketDesktopNotificationsInit = true;
         window.initDesktopNotifications();
     }
 
-    firestoreService.listenTickets((tickets, changes) => {
-        if (isFirstSnapshot) {
-            if (tickets.length > 0) {
-                allTickets = tickets;
-                filterTickets();
-                updateTicketDashboard();
-                updatePendingBadge();
-                updateApprovalsBadge();
-                // ===== Live approval queue: render from initial snapshot =====
-                applyApprovalFilters(false);
-            } else if (allTickets.length > 0) {
-                filterTickets();
-                updateTicketDashboard();
-                updatePendingBadge();
-                updateApprovalsBadge();
-                applyApprovalFilters(false);
+    if (typeof unsubscribeTickets === 'function') {
+        try { unsubscribeTickets(); } catch (e) { /* ignore */ }
+    }
+    ticketListenerActive = true;
+    ticketListenerFailed = false;
+
+    unsubscribeTickets = firestoreService.listenTickets((tickets, changes, metadata) => {
+        if (!initialSyncDone) {
+            const fromCache = !!(metadata && metadata.fromCache);
+            // An empty CACHE snapshot means "nothing cached yet", not "no tickets":
+            // keep whatever is shown and wait for the server.
+            if (fromCache && tickets.length === 0) return;
+            allTickets = tickets;
+            filterTickets();
+            updateTicketDashboard();
+            updatePendingBadge();
+            updateApprovalsBadge();
+            // ===== Live approval queue: render from initial snapshot =====
+            applyApprovalFilters(false);
+            if (!fromCache) {
+                initialSyncDone = true;
+                isInitialTicketLoad = false;
+                if (dashboardDataReady) renderDashboard();
             }
-            isFirstSnapshot = false;
+            markReady();
             return;
         }
-        
+
         const changeArray = changes || [];
         if (changeArray.length === 0) return;
         
@@ -4033,7 +4108,12 @@ function setupTicketListener() {
         }
     }, (error) => {
         console.error('Ticket listener error:', error);
-    });
+        ticketListenerActive = false;
+        ticketListenerFailed = true;
+        markReady();
+    }, { includeMetadataChanges: true });
+
+    return ready;
 }
 
 // ==============================================================
@@ -4139,13 +4219,15 @@ function filterTickets() {
     const selectedBranch = ticketBranchFilter ? ticketBranchFilter.value : 'all';
 
     filteredTickets = allTickets.filter(ticket => {
-        const searchable = [
+        // ⚡ PERF: the haystack (3 locale date formats per ticket) is only built
+        // when there IS a keyword — this runs over every ticket on every live
+        // snapshot, and with an empty search box it was pure overhead.
+        const keywordMatch = !keyword || [
             ticket.ticketNumber, ticket.branch, ticket.name, ticket.incident, ticket.description,
             // Date Created, in the formats users type ("Oct 10, 2026", "10/10/2026",
             // "2026-10-10"), matching this dashboard's formatDateTime column.
             ...dateSearchTokens(ticket.createdAt)
-        ].filter(Boolean).join(' ').toLowerCase();
-        const keywordMatch = !keyword || searchable.includes(keyword);
+        ].filter(Boolean).join(' ').toLowerCase().includes(keyword);
         const statusMatch = selectedStatus === 'all' || getDisplayStatus(ticket) === selectedStatus;
         const priorityMatch = selectedPriority === 'all' || (ticket.priority || 'Low') === selectedPriority;
         const branchMatch = selectedBranch === 'all' || ticket.branch === selectedBranch;
@@ -8304,19 +8386,36 @@ async function violationCloudinaryUpload(file, folderPath, onProgress) {
     formData.append('asset_folder', folderPath);
     formData.append('folder', folderPath);
     formData.append('public_id', uniquePublicId);
-    const res = await fetch(
-        'https://api.cloudinary.com/v1_1/' + VIOLATION_CLOUDINARY_CLOUD_NAME + '/auto/upload',
-        { method: 'POST', body: formData }
-    );
-    if (!res.ok) {
-        let errMsg = 'Upload failed (HTTP ' + res.status + ').';
-        try {
-            const err = await res.json();
-            if (err && err.error && err.error.message) errMsg = err.error.message;
-        } catch (e) { /* ignore parse error */ }
-        throw new Error(errMsg);
-    }
-    const data = await res.json();
+
+    // ⚠️ XHR, NOT fetch: fetch cannot report UPLOAD progress, so a large video
+    // (tens of MB) showed a bar that never moved for the whole upload and
+    // looked frozen. XHR's upload.onprogress feeds the real byte count to the
+    // caller's onProgress (0-100).
+    const data = await new Promise((resolve, reject) => {
+        const xhr = new XMLHttpRequest();
+        xhr.open('POST', 'https://api.cloudinary.com/v1_1/' + VIOLATION_CLOUDINARY_CLOUD_NAME + '/auto/upload');
+        if (xhr.upload && typeof onProgress === 'function') {
+            xhr.upload.onprogress = (e) => {
+                if (e.lengthComputable && e.total > 0) {
+                    try { onProgress(Math.round((e.loaded / e.total) * 100)); } catch (err) { /* UI only */ }
+                }
+            };
+        }
+        xhr.onload = () => {
+            let body = null;
+            try { body = JSON.parse(xhr.responseText); } catch (e) { /* not JSON */ }
+            if (xhr.status >= 200 && xhr.status < 300 && body) {
+                resolve(body);
+                return;
+            }
+            const msg = (body && body.error && body.error.message)
+                || ('Upload failed (HTTP ' + xhr.status + ').');
+            reject(new Error(msg));
+        };
+        xhr.onerror = () => reject(new Error('Upload failed — check your internet connection and try again.'));
+        xhr.onabort = () => reject(new Error('Upload was cancelled.'));
+        xhr.send(formData);
+    });
     return {
         public_id: data.public_id,
         secure_url: data.secure_url,
@@ -9637,15 +9736,59 @@ async function saveViolationForm(e) {
             });
             const widget = violationUploadWidget;
             for (let i = 0; i < files.length; i++) {
-                const att = await violationCloudinaryUpload(files[i], folderPath, (pct) => {
+                // ⚠️ VIDEOS ABOVE 15 MB ARE COMPRESSED FIRST (js/video-compressor.js)
+                // to save Violations Cloudinary storage (25 GB total). Same
+                // resolution, H.264 MP4, medium quality. Anything else — and any
+                // video the browser cannot compress — uploads exactly as before:
+                // compress() always resolves with a file to upload, never throws.
+                //
+                // Progress: a compressed file's slice of the bar is split 50/50
+                // (compressing, then uploading), so the bar only ever climbs.
+                let fileToUpload = files[i];
+                let compression = null;
+                const compressing = !!(window.VideoCompressor && window.VideoCompressor.shouldCompress(fileToUpload));
+                if (compressing) {
+                    if (violationUploadStatus) {
+                        violationUploadStatus.textContent = `Compressing video ${i + 1} of ${files.length}… 0%`;
+                    }
+                    setUploadProgress(widget, Math.round(aggregateUploadPercent(i, 0, files.length)));
+                    compression = await window.VideoCompressor.compress(fileToUpload, {
+                        onProgress: (p) => {
+                            const own = Math.round(p * 100);
+                            setUploadProgress(widget, Math.round(aggregateUploadPercent(i, own / 2, files.length)));
+                            if (violationUploadStatus) {
+                                violationUploadStatus.textContent = `Compressing video ${i + 1} of ${files.length}… ${own}%`;
+                            }
+                        }
+                    });
+                    fileToUpload = (compression && compression.file) || files[i];
+                    if (compression && compression.compressed) {
+                        console.log('[Violation] compressed', files[i].name, formatFileSize(compression.originalBytes),
+                            '->', formatFileSize(compression.outputBytes));
+                    } else {
+                        console.info('[Violation] uploading original', files[i].name, '(' + (compression && compression.reason) + ')');
+                    }
+                }
+                const uploadBase = compressing ? 50 : 0;
+                const uploadShare = compressing ? 0.5 : 1;
+                let att = await violationCloudinaryUpload(fileToUpload, folderPath, (pct) => {
                     // Aggregated, not raw: feeding each file's own 0-100 straight
                     // into the bar made three files produce 0->100, 0->100, 0->100,
                     // so the bar visibly restarted and read as a stuck upload.
-                    setUploadProgress(widget, aggregateUploadPercent(i, pct, files.length));
+                    setUploadProgress(widget, Math.round(aggregateUploadPercent(i, uploadBase + pct * uploadShare, files.length)));
                     if (violationUploadStatus) {
                         violationUploadStatus.textContent = `Uploading ${i + 1} of ${files.length}…`;
                     }
                 });
+                // Remember the original size of a compressed video (for the
+                // record and the storage report); bytes/name are the stored file.
+                if (compression && compression.compressed) {
+                    att = Object.assign({}, att, {
+                        compressed: true,
+                        originalBytes: compression.originalBytes,
+                        originalName: files[i].name
+                    });
+                }
                 // ⚠️ STAMP FILES ADDED THROUGH EDIT VIOLATION. An edit-time upload
                 // is additional evidence (typically footage / another angle the
                 // Area Manager asked for), so it is flagged on the record itself.

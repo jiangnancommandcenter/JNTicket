@@ -1904,6 +1904,53 @@
     }
 
     /**
+     * ⚠️ THE SUPER ADMIN INDICATOR FOR STORE ROLES — keep the directory ROLE true.
+     *
+     * HR knows a Super Admin's role from its roster (`users where role ==
+     * 'superadmin'`), which paints that row blue with the gold rank ring. An
+     * Area Manager / RM/SM has NO roster (no personal-chat peer, and the rules
+     * deliberately let store roles read no account docs), so for them the role
+     * comes ONLY from the self-published directory
+     * (chats/owner-superadmin/profiles, readable by every chat role). A Super
+     * Admin's entry was written only when they saved a chat profile by hand —
+     * usually never, or with `role: ''` — so the store side resolved the role
+     * to '' and drew the grey "unknown" avatar.
+     *
+     * So on every mount a Super Admin stamps `role: 'superadmin'` onto their own
+     * directory entry (only when it is missing or wrong), and an account whose
+     * entry still SAYS superadmin but is no longer one (re-roled, e.g. in the
+     * Firebase console) corrects it — so an ex-Super Admin never stays blue.
+     * Nobody else's entry is touched, and no other role publishes one here, so
+     * no other list changes.
+     *
+     * No rules change: `{ email, role }` merged onto the doc stays inside the
+     * deployed profiles allowlist (email, role, displayName, title) and the
+     * `email == selfEmail()` check. Best-effort: a refused write only leaves
+     * the old grey, never breaks chat.
+     */
+    function syncMyDirectoryRole() {
+        if (!currentUserEmail) return;
+        if (typeof db === 'undefined' || !db || typeof db.collection !== 'function') return;
+        const mine = normalizeRole(currentRole);
+        let ref;
+        try {
+            ref = myDirectoryRef();
+        } catch (e) { return; }
+        if (!ref || typeof ref.get !== 'function' || typeof ref.set !== 'function') return;
+        ref.get().then(function (snap) {
+            const existing = (snap && snap.exists && typeof snap.data === 'function' && snap.data()) || {};
+            const listed = normalizeRole(existing.role);
+            const needed = mine === 'superadmin'
+                ? listed !== 'superadmin'               // publish / fix my superadmin badge
+                : listed === 'superadmin';              // drop a stale superadmin badge
+            if (!needed) return;
+            return ref.set({ email: currentUserEmail, role: mine || '' }, { merge: true });
+        }).catch(function (error) {
+            console.warn('[Chat] Directory role not synced:', error && error.message);
+        });
+    }
+
+    /**
      * The roles this person may START a thread with — the exact set the pairing
      * rule (isStartable) accepts, derived from CHAT_ALLOWED_ROLES rather than
      * written out again, so adding a chat role cannot leave the roster behind.
@@ -2509,7 +2556,17 @@ function syncRoomMessageWatchers() {
             // it (the remembered-rooms invariant): unknown stays visible, a
             // known-forbidden role is hidden.
             const peerEntry = startableEntryFor(peer);
-            if (peerEntry && normalizeRole(peerEntry.role) && !isStartable(peerEntry)) return;
+            // ⚠️ EXCEPT an EXISTING thread between a store role (Area Manager /
+            // RM/SM) and a Super Admin. Before syncMyDirectoryRole() published
+            // the Super Admin's role, the store side never KNEW that peer's
+            // role, so this row stayed visible as a grey "unknown" — knowing the
+            // role now must colour it blue, not make it vanish. Only an EXISTING
+            // conversation is kept: never-started rows still come solely from
+            // isStartable() below, so no new Super Admin row is offered.
+            const myRole = normalizeRole(currentRole);
+            const keepSuperadminThread = (myRole === 'owner' || myRole === 'rmsm')
+                && peerEntry && normalizeRole(peerEntry.role) === 'superadmin';
+            if (!keepSuperadminThread && peerEntry && normalizeRole(peerEntry.role) && !isStartable(peerEntry)) return;
             seen[peer] = true;
             rows.push({
                 roomId: roomId,
@@ -3193,6 +3250,21 @@ function subscribeRoomForList(roomId) {
     // load, and an approval re-seeds live (script.js ensureBranchGroupChats).
     var repairedBranchRooms = {};
 
+    // ⚡ PERF: one shared `users` read for the membership repair. It runs once
+    // per branch room, and each run used to download the whole users
+    // collection; rooms opened within a minute now reuse a single read.
+    var usersSnapshotShared = null;
+    var usersSnapshotSharedAt = 0;
+    function getUsersSnapshotShared() {
+        var now = Date.now();
+        if (!usersSnapshotShared || now - usersSnapshotSharedAt > 60000) {
+            usersSnapshotSharedAt = now;
+            usersSnapshotShared = db.collection('users').get();
+            usersSnapshotShared.catch(function () { usersSnapshotShared = null; });
+        }
+        return usersSnapshotShared;
+    }
+
     /**
      * Re-seed a branch room's `members` to the authoritative team when it has
      * drifted — specifically when an OLDER client wrote `everyoneKnownForGroup()`
@@ -3241,7 +3313,7 @@ function subscribeRoomForList(roomId) {
         };
         const currentMembers = norm(summary.members);
 
-        db.collection('users').get().then(function (snap) {
+        getUsersSnapshotShared().then(function (snap) {
             const allUsers = [];
             snap.forEach(function (doc) {
                 allUsers.push(Object.assign({ id: doc.id }, doc.data() || {}));
@@ -6919,6 +6991,30 @@ function syncSummaryFromMessage(roomId, msg) {
             }
         } catch (e) { /* fall through to the scan */ }
 
+        // 3a. ⚡ PERF fast path: exact-match query on ticketNumber (single-field
+        // index, no composite needed) instead of downloading every ticket.
+        // Tried in the common casings; only a full MATCH short-circuits — any
+        // other outcome falls through to the original scan below, so the
+        // result (including the "still open" flag) is unchanged.
+        try {
+            var rawKeyCasing = String(ref || '').trim();
+            var variants = [key, key.toUpperCase()];
+            if (rawKeyCasing && variants.indexOf(rawKeyCasing) === -1) variants.push(rawKeyCasing);
+            var fast = await db.collection('tickets').where('ticketNumber', 'in', variants).get();
+            var fastMatch = null;
+            fast.forEach(function (doc) {
+                if (fastMatch) return;
+                var candidate = Object.assign({ id: doc.id }, doc.data() || {});
+                if (!isMentionableTicket(candidate)) return;
+                if (!inActiveRoomScope(candidate)) return;
+                fastMatch = candidate;
+            });
+            if (fastMatch) {
+                indexTicket(fastMatch);
+                return fastMatch;
+            }
+        } catch (e) { /* fall through to the scan */ }
+
         // 3. Match on the stored ticketNumber.
         try {
             var snapshot = await db.collection('tickets').get();
@@ -8930,6 +9026,9 @@ async function openTicketFromRef(ref) {
         // arriving in a conversation the user has not opened yet must still
         // raise the sidebar badge and the launcher badge.
         startDirectoryListener();
+        // Keep this account's directory ROLE true, so Area Managers / RM-SM
+        // (who have no roster) can show a Super Admin's blue indicator.
+        syncMyDirectoryRole();
         // The account roster (both chat roles) is the SECOND source of people:
         // the directory is self-published, so without it a never-messaged HR
         // who has never opened the chat — or a superadmin who never has —
