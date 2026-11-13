@@ -4642,6 +4642,21 @@ function mergeOperatorFootage(ticket, uploaded, removedIds) {
  * `addedKeys` is returned so the caller can mark the clips that arrived in
  * response to a footage request — see resolvedAdditionalFootage.
  */
+/**
+ * The clips that get the "NEW" badge: those added in the LATEST footage round
+ * (`latestAdditionalFootage`). `resolvedAdditionalFootage` is cumulative across
+ * rounds, so badging from it marked every clip from every round as new. Tickets
+ * resolved before `latestAdditionalFootage` existed fall back to it unchanged.
+ */
+function footageAddedList(ticket) {
+    // An EMPTY array is meaningful ("this round added nothing", e.g. a
+    // notes-only resubmit) — writers store [] rather than deleting the field
+    // during a footage cycle, so it never falls back to the cumulative list.
+    if (ticket && Array.isArray(ticket.latestAdditionalFootage)) return ticket.latestAdditionalFootage;
+    if (ticket && Array.isArray(ticket.resolvedAdditionalFootage)) return ticket.resolvedAdditionalFootage;
+    return [];
+}
+
 function splitApprovalAttachments(ticket) {
     const all = getApprovalAllAttachments(ticket);
     const footage = getApprovalOperatorFootage(ticket);
@@ -4655,8 +4670,7 @@ function splitApprovalAttachments(ticket) {
     // The clips added in response to a footage request. Deliberately read
     // straight off the ticket, NOT off `footage`: this is a SUBSET, and it is
     // the only thing that distinguishes an added clip from an original one.
-    const addedKeys = keySet((ticket && Array.isArray(ticket.resolvedAdditionalFootage))
-        ? ticket.resolvedAdditionalFootage : []);
+    const addedKeys = keySet(footageAddedList(ticket));
 
     if (requester && requester.length > 0) {
         const keys = keySet(requester);
@@ -4966,6 +4980,12 @@ if (!isCloudinaryConfigured()) {
                 ? mergeOperatorFootage(
                     { resolvedAdditionalFootage: data.resolvedAdditionalFootage }, uploaded)
                 : null;
+            // The superadmin's clip belongs to the CURRENT round as well, so it
+            // joins the "NEW" set alongside the operator's (see footageAddedKeys).
+            const mergedLatest = mergedAdditional
+                ? mergeOperatorFootage(
+                    { resolvedAdditionalFootage: data.latestAdditionalFootage || [] }, uploaded)
+                : null;
             await db.collection('tickets').doc(id).update({
                 attachments: merged,
                 resolutionAttachmentUrl: attachmentUrl(merged[0]),
@@ -4973,6 +4993,7 @@ if (!isCloudinaryConfigured()) {
                 // never had one keeps NO resolvedAdditionalFootage field at all —
                 // the same shape the operator's Resolve produces.
                 ...(mergedAdditional ? { resolvedAdditionalFootage: mergedAdditional } : {}),
+                ...(mergedLatest ? { latestAdditionalFootage: mergedLatest } : {}),
                 resolution: {
                     ...oldResolution,
                     attachments: mergedRes,
@@ -5095,10 +5116,16 @@ const input = editApprovalAttachmentInput;
                 ? mergeOperatorFootage(
                     { resolvedAdditionalFootage: data.resolvedAdditionalFootage }, uploaded)
                 : null;
+            // Current round, same as the approval-modal upload above.
+            const mergedLatest = mergedAdditional
+                ? mergeOperatorFootage(
+                    { resolvedAdditionalFootage: data.latestAdditionalFootage || [] }, uploaded)
+                : null;
             await db.collection('tickets').doc(id).update({
                 attachments: merged,
                 resolutionAttachmentUrl: attachmentUrl(merged[0]),
                 ...(mergedAdditional ? { resolvedAdditionalFootage: mergedAdditional } : {}),
+                ...(mergedLatest ? { latestAdditionalFootage: mergedLatest } : {}),
                 resolution: {
                     ...oldResolution,
                     attachments: mergedRes,
@@ -5183,6 +5210,65 @@ if (saveApprovalInfoBtn) {
     });
 }
 
+// ===== Open footage request (answered by the next approval) =====
+
+/** Milliseconds from a Firestore Timestamp / Date / ISO string, or 0. */
+function footageTimeMs(value) {
+    if (!value) return 0;
+    if (typeof value.toMillis === 'function') return value.toMillis();
+    if (typeof value.toDate === 'function') return value.toDate().getTime();
+    const t = new Date(value).getTime();
+    return Number.isFinite(t) ? t : 0;
+}
+
+/** The newest footage_request note, or null. */
+function latestFootageNote(ticket) {
+    const notes = (ticket && Array.isArray(ticket.comments) ? ticket.comments : [])
+        .filter(c => c && c.type === 'footage_request');
+    return notes.length ? notes[notes.length - 1] : null;
+}
+
+/**
+ * True when a footage request is still waiting for its answer, i.e. the
+ * approval about to happen is that answer. Uses the `footageRequest` marker;
+ * a ticket requested before the marker existed falls back to "the latest
+ * footage note is newer than the last approval" (a request is only ever filed
+ * on an approved ticket, so the next approval is its answer).
+ */
+function isOpenFootageRequest(ticket) {
+    if (!ticket) return false;
+    const marker = ticket.footageRequest;
+    if (marker && typeof marker === 'object') return marker.status === 'pending';
+    const note = latestFootageNote(ticket);
+    if (!note) return false;
+    return footageTimeMs(note.requestedAt) > footageTimeMs(ticket.approvedAt);
+}
+
+/** Who asked for the footage, as an email (may be ''). */
+function footageRequesterEmail(ticket) {
+    const marker = (ticket && ticket.footageRequest) || {};
+    const fromMarker = String(marker.requestedByEmail || '').trim().toLowerCase();
+    if (fromMarker) return fromMarker;
+    const note = latestFootageNote(ticket) || {};
+    const fromNote = String(note.requestedByEmail || note.requestedBy || '').trim().toLowerCase();
+    return /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(fromNote) ? fromNote : '';
+}
+
+/** Firestore update fields that close the open request. */
+function footageAnsweredUpdate(ticket) {
+    const update = {
+        'footageRequest.status': 'answered',
+        'footageRequest.answeredAt': firebase.firestore.FieldValue.serverTimestamp()
+    };
+    if (!(ticket && ticket.footageRequest && typeof ticket.footageRequest === 'object')) {
+        const note = latestFootageNote(ticket) || {};
+        update['footageRequest.requestedBy'] = note.requestedBy || '';
+        update['footageRequest.requestedByEmail'] = footageRequesterEmail(ticket);
+        if (note.requestedAt) update['footageRequest.requestedAt'] = note.requestedAt;
+    }
+    return update;
+}
+
 window.approveResolution = async function(id) {
     const confirmed = await showConfirmDialog({
         title: 'Approve Resolution',
@@ -5228,6 +5314,9 @@ window.approveResolution = async function(id) {
     // already-approved ticket cannot silently hand out extra time.
     const needsFreshWindow = typeof hasFootageRequestComment === 'function'
         && hasFootageRequestComment(approvedTicket);
+    // Is THIS approval the answer to an open footage request? Then the
+    // manager who asked is told (owner-dashboard listener + email).
+    const footageAnswered = isOpenFootageRequest(approvedTicket);
 
     try {
         await firestoreService.updateTicket(id, {
@@ -5244,7 +5333,11 @@ window.approveResolution = async function(id) {
                 accessOpenedAt: firebase.firestore.FieldValue.delete(),
                 accessOpenedBy: firebase.firestore.FieldValue.delete(),
                 accessExpiresAt: firebase.firestore.FieldValue.delete()
-            } : {})
+            } : {}),
+            // Close the open request. Dot paths so the requester fields written
+            // with the request are kept; for an in-flight ticket that predates
+            // the marker, they are filled from the latest footage note.
+            ...(footageAnswered ? footageAnsweredUpdate(approvedTicket) : {})
         });
         // Keep the in-memory copy in sync (listener is only a backup): mirror
         // the re-arm so badge/filter/expiry checks see the fresh state at once.
@@ -5273,7 +5366,9 @@ window.approveResolution = async function(id) {
             // there is no date to promise. The email says so in words instead
             // (see buildTicketApprovedEmail in js/email.js).
             approvedBy: approvedByEmail,
-            prevApprovalStatus: prevApprovalStatus
+            prevApprovalStatus: prevApprovalStatus,
+            footageAnswered: footageAnswered,
+            footageRequesterEmail: footageAnswered ? footageRequesterEmail(approvedTicket) : ''
         });
 
     } catch (error) {
@@ -5326,8 +5421,33 @@ window.transferTicketToStore = async function(id) {
     const prevApprovalStatus = approvedTicket ? (approvedTicket.approvalStatus || 'pending_approval') : '';
     const approvedByEmail = (auth.currentUser && auth.currentUser.email) || 'unknown';
     const accessStartsOnOpen = true;
+    // ⚠️ THIS is the button that approves a resolution (approveResolution has
+    // no button), so a footage request is answered HERE. Two extra writes when
+    // it is:
+    //   - close the open request (footageRequest.status → 'answered'), which
+    //     triggers the manager's in-app notice and the footage email;
+    //   - re-arm the viewing window, exactly as approveResolution does: the
+    //     manager's old accessOpenedAt survives the footage cycle, so without
+    //     clearing it the ticket comes back already expired.
+    const footageAnswered = isOpenFootageRequest(approvedTicket);
+    const storeExtraFields = footageAnswered ? Object.assign({
+        accessOpenedAt: firebase.firestore.FieldValue.delete(),
+        accessOpenedBy: firebase.firestore.FieldValue.delete(),
+        accessExpiresAt: firebase.firestore.FieldValue.delete()
+    }, footageAnsweredUpdate(approvedTicket)) : null;
     try {
-        await firestoreService.transferTicketToStore(id, approvedByEmail, (auth.currentUser && auth.currentUser.displayName) || approvedByEmail);
+        await firestoreService.transferTicketToStore(id, approvedByEmail,
+            (auth.currentUser && auth.currentUser.displayName) || approvedByEmail, storeExtraFields);
+        if (footageAnswered) {
+            // Mirror the re-arm in memory, same as approveResolution.
+            const syncIdx = allTickets.findIndex(t => t && t.id === id);
+            if (syncIdx > -1) {
+                delete allTickets[syncIdx].accessOpenedAt;
+                delete allTickets[syncIdx].accessOpenedBy;
+                delete allTickets[syncIdx].accessExpiresAt;
+                allTickets[syncIdx].accessWindowStartsOnOpen = true;
+            }
+        }
         if (approvalDetailsModal) approvalDetailsModal.classList.remove('active');
         currentApprovalTicketId = null;
         updateApprovalsBadge();
@@ -5335,10 +5455,14 @@ window.transferTicketToStore = async function(id) {
         if (typeof showToast === 'function') showToast('Ticket transferred to Store. HR and Area Manager/RM/SM can now view it.', 'success');
 
         // ===== Email the requester (normal approval email) =====
+        // On a footage answer it goes to the manager who asked, with the
+        // footage line (see notifyRequesterOfApproval).
         await notifyRequesterOfApproval(approvedTicket, {
             id: id,
             approvedBy: approvedByEmail,
-            prevApprovalStatus: prevApprovalStatus
+            prevApprovalStatus: prevApprovalStatus,
+            footageAnswered: footageAnswered,
+            footageRequesterEmail: footageAnswered ? footageRequesterEmail(approvedTicket) : ''
         });
     } catch (error) {
         console.error('Transfer to Store error:', error);
@@ -5466,7 +5590,23 @@ async function notifyRequesterOfApproval(ticket, ctx) {
             delete snapshot.accessExpiresAt;
         }
 
-        const recipient = window.EmailService.resolveRecipient(snapshot);
+        // A footage answer goes to the manager who ASKED for the footage, who
+        // is often not the original filer. The email bridge allows that address
+        // because it is stored on the ticket as footageRequest.requestedByEmail
+        // (see docs/apps-script/RCMS-Ticket-Notifier.gs ticketRecipients).
+        const emailOpts = ctx.footageAnswered
+            ? { footageAnswered: true, recipient: ctx.footageRequesterEmail || '' }
+            : {};
+        if (ctx.footageAnswered) {
+            snapshot.footageRequest = Object.assign({}, snapshot.footageRequest || {}, {
+                status: 'answered',
+                requestedByEmail: ctx.footageRequesterEmail || ''
+            });
+        }
+        const recipient = (emailOpts.recipient && window.EmailService.isValidEmail
+                && window.EmailService.isValidEmail(emailOpts.recipient))
+            ? emailOpts.recipient
+            : window.EmailService.resolveRecipient(snapshot);
         if (!recipient) {
             await recordApprovalEmail(ctx.id, { status: 'skipped_no_recipient', to: '' });
             if (typeof showToast === 'function') {
@@ -5476,7 +5616,8 @@ async function notifyRequesterOfApproval(ticket, ctx) {
             return;
         }
 
-        const result = await window.EmailService.sendTicketApprovedEmail(snapshot);
+        const result = await window.EmailService.sendTicketApprovedEmail(snapshot,
+            Object.assign({}, emailOpts, { recipient: recipient }));
         await recordApprovalEmail(ctx.id, {
             status: result.ok ? 'dispatched' : (result.status || 'failed'),
             to: recipient,
@@ -6026,6 +6167,13 @@ window.startTicket = async function(id) {
 window.resolveTicket = function(id) {
     const ticket = allTickets.find(t => t.id === id);
     if (!ticket) return;
+    // A ticket sent back by an "additional footage" request is an EDIT of the
+    // previous resolution, not a new one: the operator needs the old notes and
+    // the old pictures/videos/files in front of them. The Revise & Resubmit
+    // modal already is that form, so hand over to it (in footage mode).
+    if (isFootageReworkTicket(ticket)) {
+        return window.reviseTicket(id);
+    }
 currentResolveTicketId = id;
     // Map the resolve widget to this ticket id so auto-uploads go to the right folder
     const resolveWidget = document.getElementById('resolveDropzone') ? document.getElementById('resolveDropzone').closest('.upload-widget') : null;
@@ -6037,8 +6185,6 @@ currentResolveTicketId = id;
     if (resolveModalTitle) resolveModalTitle.textContent = `Resolve Ticket: ${ticket.ticketNumber || id}`;
     if (resolutionNotesEl) resolutionNotesEl.value = '';
     if (resolveAttachmentInput) resolveAttachmentInput.value = '';
-    // Show any existing ticket attachments so the operator keeps prior evidence in view
-    renderAttachmentsIntoGrid(document.getElementById('resolveAttachmentsGrid'), ticket);
     if (resolveModal) resolveModal.classList.add('active');
 };
 
@@ -6154,6 +6300,11 @@ try {
                 resolvedAdditionalFootage: hasFootageRequest && attachmentList.length > 0
                     ? additionalFootage
                     : firebase.firestore.FieldValue.delete(),
+                // THIS round's clips only — drives the "NEW" badge (see
+                // footageAddedKeys). Same condition as the cumulative field.
+                latestAdditionalFootage: hasFootageRequest
+                    ? attachmentList.slice()
+                    : firebase.firestore.FieldValue.delete(),
                 // Clear any previous rejection data when resubmitting a For Revision ticket
                 rejectionReason: firebase.firestore.FieldValue.delete(),
                 rejection: firebase.firestore.FieldValue.delete(),
@@ -6205,9 +6356,31 @@ try {
 //  attachments, and resubmit for approval.
 // ==============================================================
 
+/**
+ * True for a ticket the operator is re-working because an Area Manager /
+ * RM/SM (or the Track page) asked for additional footage. Both halves are
+ * needed: the note alone stays on the ticket forever, so without the status
+ * check a ticket in a LATER, unrelated cycle would still match.
+ */
+function isFootageReworkTicket(ticket) {
+    return !!ticket
+        && String(ticket.status || '') === 'Insufficient Footage'
+        && hasFootageRequestComment(ticket);
+}
+
+// Set by reviseTicket() each time the modal opens, read by its submit handler.
+let revisionFootageMode = false;
+
+const REVISION_INTRO_REJECTED = 'This resolution was sent back for revision. Review the reason below, update the '
+    + 'resolution notes, and resubmit for <strong>Superadmin approval</strong>.';
+const REVISION_INTRO_FOOTAGE = 'Additional footage was requested for this ticket. Review the request below, edit your '
+    + 'resolution notes, remove or add files as needed, and resubmit for <strong>Superadmin approval</strong>.';
+
 window.reviseTicket = function(id) {
     const ticket = allTickets.find(t => t.id === id);
     if (!ticket) return;
+
+    revisionFootageMode = isFootageReworkTicket(ticket);
 
 currentResolveTicketId = id;
 
@@ -6223,11 +6396,34 @@ currentResolveTicketId = id;
         resetUploadProgress(revisionWidget);
     }
 
-    if (revisionModalTitle) revisionModalTitle.textContent = `Revise & Resubmit: ${ticket.ticketNumber || id}`;
+    if (revisionModalTitle) {
+        revisionModalTitle.textContent = `${revisionFootageMode ? 'Update Resolution' : 'Revise & Resubmit'}: ${ticket.ticketNumber || id}`;
+    }
+    // The intro and the reason-box label are swapped per mode and ALWAYS set,
+    // so a footage-mode open can never leave its wording behind for the next
+    // For Revision ticket.
+    const revisionIntroText = document.getElementById('revisionIntroText');
+    if (revisionIntroText) {
+        revisionIntroText.innerHTML = revisionFootageMode ? REVISION_INTRO_FOOTAGE : REVISION_INTRO_REJECTED;
+    }
+    const revisionReasonLabel = document.getElementById('revisionReasonLabel');
+    if (revisionReasonLabel) {
+        revisionReasonLabel.textContent = revisionFootageMode ? 'Additional Footage Requested' : 'Rejection Reason';
+    }
 
-    // Show the superadmin's rejection reason so the operator knows what to fix
-    const rejection = ticket.rejection || {};
-    const reason = rejection.reason || ticket.rejectionReason || 'No rejection reason provided.';
+    let reason;
+    if (revisionFootageMode) {
+        // The manager's own words — the LATEST request is the one being answered.
+        const requests = (Array.isArray(ticket.comments) ? ticket.comments : [])
+            .filter(c => c && c.type === 'footage_request');
+        const latest = requests[requests.length - 1] || {};
+        reason = String(latest.text || '').trim() || 'No details provided.';
+        if (latest.requestedBy) reason += ` — ${latest.requestedBy}`;
+    } else {
+        // Show the superadmin's rejection reason so the operator knows what to fix
+        const rejection = ticket.rejection || {};
+        reason = rejection.reason || ticket.rejectionReason || 'No rejection reason provided.';
+    }
     if (revisionRejectionReason) {
         revisionRejectionReason.textContent = reason;
     }
@@ -6339,12 +6535,38 @@ try {
 
             // 3) Mark Resolved + pending superadmin approval (re-enter the queue)
             const operatorFootage = mergeOperatorFootage(ticket, attachmentList, removedIds);
+            // FOOTAGE MODE ONLY: keep the Track page's "Resolved Additional
+            // Footage" marker, which the plain Resolve handler used to write for
+            // these tickets. Cumulative and removal-aware (previous rounds -
+            // removed + this round), so a notes-only resubmit keeps earlier
+            // marked clips; an empty result clears the field rather than
+            // storing []. A For Revision resubmit does not touch the field.
+            let additionalFootageField = {};
+            if (revisionFootageMode) {
+                const prevAdditional = Array.isArray(ticket && ticket.resolvedAdditionalFootage)
+                    ? ticket.resolvedAdditionalFootage : [];
+                const additional = mergeOperatorFootage(
+                    { resolvedAdditionalFootage: prevAdditional }, attachmentList, removedIds);
+                // THIS round only (drives the "NEW" badge): previous rounds'
+                // clips are deliberately not carried over, so a notes-only
+                // resubmit marks nothing as new.
+                const latest = attachmentList.filter(a => !(a && removedIds.has(a.public_id)));
+                additionalFootageField = {
+                    resolvedAdditionalFootage: additional.length
+                        ? additional
+                        : firebase.firestore.FieldValue.delete(),
+                    // [] (not delete) so "nothing new this round" is recorded
+                    // and the badge does not fall back to the cumulative list.
+                    latestAdditionalFootage: latest
+                };
+            }
             const updateData = {
                 status: 'Resolved',
                 approvalStatus: 'pending_approval',
                 resolutionNotes: notes,
                 resolutionAttachmentUrl: attachmentUrl(mergedAtt[0]),
                 attachments: mergedAtt,
+                ...additionalFootageField,
                 // Clear the previous rejection data since the resolution was revised
                 rejectionReason: firebase.firestore.FieldValue.delete(),
                 rejection: firebase.firestore.FieldValue.delete(),
@@ -6572,52 +6794,6 @@ function getAttachmentIcon(resourceType, format) { return attachmentHelpers().ge
 function getAttachmentColor(format) { return attachmentHelpers().getAttachmentColor(format); }
 
 /**
- * Render a ticket's existing attachments into a given grid element, using the
- * same thumbnail/icon layout as the Ticket Details modal. Shared by the
- * Resolve and Revise modals so previously-uploaded evidence stays visible.
- * @param {HTMLElement} grid  the `.attachments-grid` container to fill
- * @param {object} ticket     the ticket object holding `attachments`
- */
-function renderAttachmentsIntoGrid(grid, ticket) {
-    if (!grid) return;
-    const attachments = (ticket && Array.isArray(ticket.attachments)) ? ticket.attachments : [];
-    if (attachments.length === 0) {
-        grid.innerHTML = '<p style="color:var(--text-muted);font-size:0.85rem;">No existing attachments.</p>';
-        return;
-    }
-    grid.innerHTML = attachments.map((att, index) => {
-        const norm = normalizeAttachment(att);   // both writers' shapes
-        const url = norm ? norm.url : '';
-        const name = (norm && norm.name) || ('Attachment ' + (index + 1));
-        const sizeText = (norm && norm.bytes) ? formatFileSize(norm.bytes) : '';
-        const isImage = !!(norm && norm.resourceType === 'image');
-        const isVideo = !!(norm && norm.resourceType === 'video');
-        const icon = norm ? getAttachmentIcon(norm.resourceType, norm.format) : 'fa-file';
-        const color = norm ? getAttachmentColor(norm.format) : '#64748b';
-        const isBroken = !url;
-
-        // One shared tile builder, so this grid matches every other grid.
-        // See buildAttachmentPreview() for what used to differ here.
-        const preview = buildAttachmentPreview(norm, index);
-
-        // No URL -> a div, never an empty anchor. See renderTicketAttachments().
-        const body = isBroken
-            ? `<div class="attachment-preview" title="Link unavailable">${preview}</div>`
-            : `<a href="${url}" target="_blank" rel="noopener noreferrer" class="attachment-preview" title="${escapeHTML(name)}">${preview}</a>`;
-
-        return `
-            <div class="attachment-item" data-public-id="${escapeHTML(norm ? norm.publicId : '')}">
-                ${body}
-                <div class="attachment-meta">
-                    <span class="attachment-name" title="${escapeHTML(name)}">${escapeHTML(name)}</span>
-                    ${sizeText ? `<span class="attachment-size">${escapeHTML(sizeText)}</span>` : ''}
-                </div>
-            </div>
-        `;
-    }).join('');
-}
-
-/**
  * Whether a ticket is allowed to display attachments in the Ticket Details modal.
  * Attachments are shown only for fully resolved tickets and for-revision tickets.
  */
@@ -6631,14 +6807,22 @@ let removedRevisionAttachmentIds = new Set();
 /**
  * Render the existing attachments in the Revise & Resubmit modal with a remove
  * (×) button so the operator can delete prior evidence before resubmitting.
- * Deleted files are tracked in `removedRevisionAttachmentIds` (and removed from
- * Cloudinary) and excluded from the merged attachment list on submit.
+ * Deleted files are tracked in `removedRevisionAttachmentIds` and excluded from
+ * the merged attachment list on submit. They are removed from the TICKET only —
+ * the file itself stays in Cloudinary (an unsigned client cannot delete it).
  * @param {HTMLElement} grid    the `#revisionAttachmentsGrid` container
  * @param {object} ticket       the ticket holding `attachments`
  */
 function renderRevisionAttachments(grid, ticket) {
     if (!grid) return;
-    const attachments = (ticket && Array.isArray(ticket.attachments)) ? ticket.attachments : [];
+    // OPERATOR FILES ONLY. `ticket.attachments` also carries what the requester
+    // attached when filing the ticket; those are not part of the resolution the
+    // operator is revising, so they are neither shown nor removable here. They
+    // stay on the ticket untouched (the submit handler only drops ids recorded
+    // in removedRevisionAttachmentIds, which can now only be operator files).
+    // splitApprovalAttachments() is the shared requester/operator split, with
+    // `requesterAttachments` as the authoritative requester list.
+    const attachments = splitApprovalAttachments(ticket).operator;
     const deletedSet = new Set(removedRevisionAttachmentIds || []);
     const visible = attachments.filter(a => !deletedSet.has(a.public_id));
     if (visible.length === 0) {

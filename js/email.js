@@ -484,7 +484,15 @@ function escapeEmailHtml(value) {
  * to login.html and returned — `?ticket=` survives that round trip (js/auth.js),
  * which is why this is a DEEP LINK and not a bare dashboard address.
  */
-function buildTicketApprovedEmail(ticket) {
+function buildTicketApprovedEmail(ticket, opts) {
+    const options = opts || {};
+    // FOOTAGE ANSWER: this approval answers an additional-footage request. The
+    // message says so, and it goes to the manager who ASKED (options.recipient,
+    // from footageRequest.requestedByEmail) — which the bridge allows because
+    // that address is stored on the ticket. Everything else is the normal
+    // approval email, so a plain approval is byte-for-byte unchanged.
+    const footageAnswered = !!options.footageAnswered;
+    const footageLine = 'The additional footage you requested has been added and approved.';
     const label = ticketEmailLabel(ticket);
     const dashboardUrl = resolveOwnerDashboardUrl();
     // Public requesters (no Area Manager account) land on the login-free Track
@@ -529,13 +537,16 @@ function buildTicketApprovedEmail(ticket) {
         headline,
         '',
         '   Ticket Number:  ' + label,
-        '',
+        ''
+    ];
+    if (footageAnswered) lines.push(footageLine, '');
+    lines.push(
         isPublicRequester ? 'Track your ticket on the public portal:' : 'View it on your Owner Dashboard:',
         ticketUrl,
         '',
         isPublicRequester ? '  -> open the link above to check your ticket status' : '  -> sign in with your account',
         isPublicRequester ? '  -> no sign-in required; enter your ticket number and contact' : '  -> ticket ' + label + ' will open automatically.'
-    ];
+    );
     if (windowLine) lines.push('', windowLine);
     lines.push('', senderName);
     const text = lines.join('\n');
@@ -553,6 +564,7 @@ function buildTicketApprovedEmail(ticket) {
         '<p style="margin:0 0 18px"><span style="display:inline-block;padding:10px 16px;border:1px solid #cbd5e1;border-radius:8px;background:#f8fafc;font-size:18px;font-weight:700;letter-spacing:0.4px">',
         escapeEmailHtml(label),
         '</span></p>',
+        footageAnswered ? '<p style="margin:0 0 18px;font-weight:600">' + escapeEmailHtml(footageLine) + '</p>' : '',
         '<p style="margin:0 0 18px">',
         '<a href="' + escapeEmailHtml(ticketUrl) + '" style="display:inline-block;background:#15803d;color:#ffffff;font-weight:700;font-size:16px;text-decoration:none;padding:14px 28px;border-radius:8px">',
         isPublicRequester ? 'Track My Ticket &rarr;</a>' : 'Open my Owner Dashboard &rarr;</a>',
@@ -571,9 +583,10 @@ function buildTicketApprovedEmail(ticket) {
         '</div>'
     ].join('');
 
+    const overrideTo = String(options.recipient || '').trim().toLowerCase();
     return {
-        to: resolveRecipient(ticket) || '',
-        subject: EMAIL_SUBJECT_PREFIX + label,
+        to: (isValidEmail(overrideTo) ? overrideTo : resolveRecipient(ticket)) || '',
+        subject: (footageAnswered ? 'Footage update — ' : '') + EMAIL_SUBJECT_PREFIX + label,
         text: text,
         html: html,
         ticketId: String((ticket && (ticket.id || ticket.ticketNumber)) || ''),
@@ -872,7 +885,7 @@ async function sendTicketApprovedEmail(ticket, opts) {
         if (!ticket) return { ok: false, status: 'no_ticket' };
         if (!isEmailConfigured()) return { ok: false, status: 'not_configured' };
 
-        const message = buildTicketApprovedEmail(ticket);
+        const message = buildTicketApprovedEmail(ticket, opts);
         if (!message.to || !isValidEmail(message.to)) {
             return { ok: false, status: 'no_recipient', to: '' };
         }

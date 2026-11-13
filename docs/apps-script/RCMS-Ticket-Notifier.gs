@@ -215,7 +215,13 @@ function ticketRecipients(idToken, ticketId) {
       fields.accessReopenRequest && fields.accessReopenRequest.mapValue &&
         fields.accessReopenRequest.mapValue.fields &&
         fields.accessReopenRequest.mapValue.fields.requestedByEmail &&
-        fields.accessReopenRequest.mapValue.fields.requestedByEmail.stringValue
+        fields.accessReopenRequest.mapValue.fields.requestedByEmail.stringValue,
+      // The manager who asked for additional footage — the footage-answer
+      // approval email goes to them (script.js notifyRequesterOfApproval).
+      fields.footageRequest && fields.footageRequest.mapValue &&
+        fields.footageRequest.mapValue.fields &&
+        fields.footageRequest.mapValue.fields.requestedByEmail &&
+        fields.footageRequest.mapValue.fields.requestedByEmail.stringValue
     ];
     var out = [];
     for (var i = 0; i < candidates.length; i++) {

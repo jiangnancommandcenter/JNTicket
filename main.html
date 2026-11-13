@@ -1734,7 +1734,7 @@
                 <button class="modal-close" id="closeRevisionModal">&times;</button>
             </div>
             <div class="modal-body">
-                <p style="color:var(--text-muted);font-size:0.85rem;margin-bottom:18px;line-height:1.5;">
+                <p id="revisionIntroText" style="color:var(--text-muted);font-size:0.85rem;margin-bottom:18px;line-height:1.5;">
                     This resolution was sent back for revision. Review the reason below, update the
                     resolution notes, and resubmit for <strong>Superadmin approval</strong>.
                 </p>
@@ -1743,7 +1743,7 @@
                 <div class="rejection-reason-box" id="revisionRejectionBox" style="grid-column:auto;margin-bottom:18px;">
                     <i class="fas fa-exclamation-circle"></i>
                     <div>
-                        <strong>Rejection Reason</strong>
+                        <strong id="revisionReasonLabel">Rejection Reason</strong>
                         <p id="revisionRejectionReason">—</p>
                     </div>
                 </div>

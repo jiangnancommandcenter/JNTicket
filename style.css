@@ -5229,6 +5229,37 @@ branch name, let alone pick one. */
     color: #fff;
 }
 
+/* Ticket-row "Request additional footage" shortcut (Area Manager / RM/SM). */
+/* A TEXT button, so it deliberately does not carry .action-btn (which is the
+   fixed-size icon square). nowrap keeps the row one line tall. */
+.owner-footage-row-btn {
+    /* Self-contained box: same 30px height as the icon buttons beside it, and
+       the label centred on both axes (.btn alone has no justify-content, so a
+       stretched button would leave its text hugging the left edge). */
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    height: 30px;
+    padding: 0 14px;
+    margin: 0;
+    border: none;
+    border-radius: var(--radius-sm);
+    font-size: 0.78rem;
+    font-weight: 600;
+    line-height: 1;
+    text-align: center;
+    white-space: nowrap;
+    flex-shrink: 0;
+    vertical-align: middle;
+    background: #16a34a;
+    color: #fff;
+}
+
+.owner-footage-row-btn:hover {
+    background: #15803d;
+    color: #fff;
+}
+
 /* ==============================================================
    VIOLATIONS REPORT — attachment remove button (edit mode)
    ============================================================== */

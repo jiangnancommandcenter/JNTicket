@@ -556,8 +556,13 @@ const firestoreService = {
      * This is the existing "Approve" behaviour — the ticket becomes visible to
      * branch users with the normal 2-day viewing window.
      */
-    async transferTicketToStore(ticketId, byEmail, byName) {
+    async transferTicketToStore(ticketId, byEmail, byName, extraFields) {
+        // `extraFields`: optional additional updates from the caller (the
+        // footage-answer close + viewing-window re-arm in script.js
+        // transferTicketToStore). Spread FIRST so the approval fields below
+        // always win.
         await db.collection('tickets').doc(ticketId).update({
+            ...(extraFields && typeof extraFields === 'object' ? extraFields : {}),
             ticketTransferTo: 'store',
             approvalStatus: 'approved',
             approvedAt: firebase.firestore.FieldValue.serverTimestamp(),

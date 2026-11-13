@@ -1898,6 +1898,36 @@
         </div>
     </div>
 
+    <!-- ============================================================ -->
+    <!-- MODAL: QUICK "REQUEST ADDITIONAL FOOTAGE" (ticket-row button) -->
+    <!-- Area Manager / RM/SM only. A shortcut to the same request as  -->
+    <!-- the form inside the ticket modal, which is left as it is.     -->
+    <!-- ============================================================ -->
+    <div class="modal-overlay" id="ownerFootageRequestModal">
+        <div class="modal-container" style="max-width:480px;">
+            <div class="modal-header">
+                <h2><i class="fas fa-video"></i> <span>Request Additional Footage</span></h2>
+                <button type="button" class="modal-close" id="closeOwnerFootageRequestModal">&times;</button>
+            </div>
+            <div class="modal-body">
+                <form class="owner-footage-form" id="ownerFootageQuickForm" style="margin-top:0;">
+                    <label for="ownerFootageQuickDetails">
+                        <i class="fas fa-ticket-alt"></i> <span id="ownerFootageQuickTicket"></span>
+                    </label>
+                    <textarea id="ownerFootageQuickDetails" rows="4" maxlength="500"
+                              placeholder="What else do you need? e.g. a wider angle covering the exit, a clearer view of the suspect"></textarea>
+                    <div class="owner-footage-actions">
+                        <span class="owner-footage-hint">The operator is notified and the ticket goes back for re-work. Nothing is approved automatically.</span>
+                        <button type="button" class="btn btn-outline btn-sm" id="ownerFootageQuickCancel">Cancel</button>
+                        <button type="submit" class="btn btn-primary btn-sm" id="ownerFootageQuickSubmit">
+                            <i class="fas fa-paper-plane"></i> Request footage
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
     <!-- ⚡ PERF: Chart.js moved here from <head> so it no longer blocks first paint. -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>

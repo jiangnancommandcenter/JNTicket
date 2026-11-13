@@ -1434,6 +1434,17 @@ function requestOwnerFootage(ticketId, details) {
       status: 'Insufficient Footage',
       approvalStatus: 'pending',
       comments: firebase.firestore.FieldValue.arrayUnion(note),
+      // The OPEN request, as a top-level map: the superadmin's approval flips
+      // it to 'answered' (approveResolution in script.js), which is what tells
+      // this dashboard and the approval email that the footage came back. It
+      // is top-level, not only in `comments`, because the email bridge can
+      // only allow recipients stored as plain ticket fields.
+      footageRequest: {
+        status: 'pending',
+        requestedBy: requestedBy,
+        requestedByEmail: requestedByEmail,
+        requestedAt: when
+      },
       updatedAt: firebase.firestore.FieldValue.serverTimestamp()
     });
   }).then(() => {
@@ -1558,8 +1569,14 @@ function splitOwnerAttachments(rawData) {
   const excludeKeys = (list) => new Set((list || []).map(keyOf).filter(Boolean));
   // The clips added in response to a footage request — a SUBSET of the operator's
   // footage, and the only thing that tells an added clip from an original one.
-  const addedKeys = excludeKeys(Array.isArray(rawData && rawData.resolvedAdditionalFootage)
-    ? rawData.resolvedAdditionalFootage : []);
+  // LATEST ROUND ONLY: `latestAdditionalFootage` holds just the current round's
+  // clips ([] = nothing new this round); `resolvedAdditionalFootage` is
+  // cumulative and is only the fallback for tickets resolved before the
+  // latest-round field existed. Same rule as footageAddedList() in script.js.
+  const addedList = Array.isArray(rawData && rawData.latestAdditionalFootage)
+    ? rawData.latestAdditionalFootage
+    : (Array.isArray(rawData && rawData.resolvedAdditionalFootage) ? rawData.resolvedAdditionalFootage : []);
+  const addedKeys = excludeKeys(addedList);
 
   if (requester && requester.length > 0) {
     const requesterKeys = excludeKeys(requester);
@@ -2152,6 +2169,70 @@ function handleOwnerFootageSubmit(event) {
   });
 }
 
+// ===== Quick "Request additional footage" popup (ticket-row shortcut) =====
+//
+// Opened from the video button on a ticket row (Area Manager / RM/SM only —
+// see `primaryBtn` in renderOwnerTickets). It is a second ENTRY POINT to the
+// same write as the form inside the ticket modal: both end in
+// requestOwnerFootage(), so validation, the fresh-document re-check, the
+// operator notification and the toasts are identical. It keeps its OWN ticket
+// id rather than sharing ownerFootageTicketId, because that one is owned (and
+// cleared) by the ticket modal.
+let ownerFootageQuickTicketId = '';
+
+window.openOwnerFootageRequest = function(ticketId) {
+  const modal = $owner('ownerFootageRequestModal');
+  if (!modal || !ticketId || !isAreaManager()) return;
+  ownerFootageQuickTicketId = String(ticketId);
+
+  const raw = (ownerAllTicketsCache || []).find((doc) => doc && doc.id === ownerFootageQuickTicketId);
+  const t = raw ? normalizeTicketReport(raw) : null;
+  const label = $owner('ownerFootageQuickTicket');
+  if (label) {
+    label.textContent = t
+      ? [t.ticketNumber, t.branchName].filter(Boolean).join(' · ')
+      : '';
+  }
+  const detailsEl = $owner('ownerFootageQuickDetails');
+  if (detailsEl) detailsEl.value = '';
+  modal.classList.add('active');
+  if (detailsEl) setTimeout(() => detailsEl.focus(), 50);
+};
+
+function closeOwnerFootageRequest() {
+  const modal = $owner('ownerFootageRequestModal');
+  if (modal) modal.classList.remove('active');
+  ownerFootageQuickTicketId = '';
+}
+
+function handleOwnerFootageQuickSubmit(event) {
+  event.preventDefault();
+  const ticketId = ownerFootageQuickTicketId;
+  if (!ticketId) {
+    ownerToast('Could not tell which ticket this is. Close and try again.', 'error');
+    return;
+  }
+  const detailsEl = $owner('ownerFootageQuickDetails');
+  const details = detailsEl ? detailsEl.value : '';
+  const btn = $owner('ownerFootageQuickSubmit');
+  if (btn && btn.disabled) return;
+  const originalHtml = btn ? btn.innerHTML : '';
+  if (btn) {
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Sending...';
+  }
+
+  requestOwnerFootage(ticketId, details).then((ok) => {
+    if (btn) {
+      btn.disabled = false;
+      btn.innerHTML = originalHtml;
+    }
+    // On success the realtime listener re-renders the row (it becomes a
+    // pending row with the eye button); on failure the popup stays open with
+    // the manager's text intact so they can fix it and retry.
+    if (ok) closeOwnerFootageRequest();
+  });
+}
 
 function closeOwnerReportModalFn() {
   // The X only HIDES the modal — "close" here means dismiss the dialog, never
@@ -2588,12 +2669,29 @@ function renderOwnerTickets(allTickets) {
            </span>`
         : '';
 
+      // The row's primary action. For Area Manager / RM/SM on a ticket that can
+      // actually accept a footage request, the eye is replaced by a "Request
+      // additional footage" shortcut that opens the quick popup — the row
+      // itself is already clickable, so View stays one tap away. Everywhere
+      // else (HR / superadmin, expired access, not-yet-approved rows — which
+      // includes a ticket whose footage request is still in flight, since
+      // that write flips approvalStatus back to 'pending') the eye is kept.
+      // Built ONCE and used by both the desktop cell and the card footer.
+      const canRequestFootage = isAreaManager() && isApprovedTicket(t) && !expired;
+      const primaryBtn = canRequestFootage
+        ? `<button type="button" class="btn owner-footage-row-btn" title="Request additional footage"
+             data-footage-ticket="${escapeHTML(t.id)}"
+             onclick="event.stopPropagation(); window.openOwnerFootageRequest(this.dataset.footageTicket);">
+             Request Footage
+           </button>`
+        : `<button type="button" class="btn btn-icon action-btn view" data-tooltip="${expired ? 'View details (access closed)' : 'View'}">
+             <i class="fas fa-eye"></i>
+           </button>`;
+
       const cardFoot = `<div class="approval-card-foot">
              ${cardAccessBlock}
              <div class="approval-card-actions">
-               <button type="button" class="btn btn-icon action-btn view" data-tooltip="${expired ? 'View details (access closed)' : 'View'}">
-                 <i class="fas fa-eye"></i>
-               </button>
+               ${primaryBtn}
                ${remarksBtn}
                ${uploadBtn}
              </div>
@@ -2610,9 +2708,7 @@ function renderOwnerTickets(allTickets) {
         <td data-label="Access">${accessCell}${accessNote}</td>
         <td>
           <div class="action-group">
-            <button type="button" class="btn btn-icon action-btn view" data-tooltip="${expired ? 'View details (access closed)' : 'View'}">
-              <i class="fas fa-eye"></i>
-            </button>
+            ${primaryBtn}
             ${remarksBtn}
             ${uploadBtn}
           </div>
@@ -2655,6 +2751,54 @@ function renderOwnerTickets(allTickets) {
     if (ownerTicketsBody) {
       ownerTicketsBody.innerHTML = '<tr><td colspan="9" class="empty-state"><em>Unable to load tickets.</em></td></tr>';
     }
+  }
+}
+
+/**
+ * True when this snapshot is the moment the superadmin answered a footage
+ * request: `footageRequest.status` went 'pending' → 'answered' (written by
+ * transferTicketToStore / approveResolution in script.js).
+ */
+function isFootageAnsweredTransition(prev, ticket) {
+  const before = prev && prev.footageRequest && prev.footageRequest.status;
+  const after = ticket && ticket.footageRequest && ticket.footageRequest.status;
+  return before === 'pending' && after === 'answered';
+}
+
+/**
+ * Tell the manager their footage request came back. Only the person who
+ * asked is notified; if the request carries no email (an anonymous Track-page
+ * request), every manager of that branch is, since one of them asked.
+ */
+function notifyOwnerFootageAnswered(ticket) {
+  if (!isAreaManager() || !ticket) return;
+  const t = normalizeTicketReport(ticket);
+  const myEmail = (typeof auth !== 'undefined' && auth && auth.currentUser && auth.currentUser.email)
+    ? String(auth.currentUser.email).toLowerCase() : '';
+  const askedBy = String((ticket.footageRequest && ticket.footageRequest.requestedByEmail) || '').toLowerCase();
+  const branch = String(t.branch || t.branchName || '').trim();
+  const mine = askedBy
+    ? askedBy === myEmail
+    : (Array.isArray(ownerAssignedBranches) && ownerAssignedBranches.includes(branch));
+  if (!mine) return;
+
+  const label = t.ticketNumber || ticket.id;
+  ownerToast(`Updated footage for ${label} is ready.`, 'success');
+  try {
+    if (('Notification' in window) && Notification.permission === 'granted') {
+      const n = new Notification('🎥 Footage Update Approved — Jiangnan Command Center', {
+        body: `Ticket: ${label}\nBranch: ${branch || 'Unknown'}\nThe additional footage you requested is ready to view.`,
+        tag: `footage-answered-${ticket.id}`,
+        silent: false
+      });
+      n.onclick = () => {
+        try { window.focus(); } catch (e) { /* ignore */ }
+        try { window.openOwnerReport(ticket.id); } catch (e) { /* ignore */ }
+        try { n.close(); } catch (e) { /* ignore */ }
+      };
+    }
+  } catch (e) {
+    console.error('Footage-answered notification failed:', e);
   }
 }
 
@@ -2719,6 +2863,9 @@ function setupOwnerTicketListener() {
               typeof window.notifyTicketStatusChange === 'function') {
             window.notifyTicketStatusChange(prev, t);
           }
+          if (prev && isFootageAnsweredTransition(prev, t)) {
+            notifyOwnerFootageAnswered(t);
+          }
         }
       }
       previousOwnerTickets = list.map(t => ({ ...t }));
@@ -2764,6 +2911,16 @@ function bindOwnerEvents() {
 
   ownerReportModal?.addEventListener('click', (e) => {
     if (e.target === ownerReportModal) closeOwnerReportModalFn();
+  });
+
+  // Quick footage-request popup (ticket-row shortcut). Static markup, so its
+  // listeners are bound directly, once.
+  const footageQuickModal = $owner('ownerFootageRequestModal');
+  $owner('ownerFootageQuickForm')?.addEventListener('submit', handleOwnerFootageQuickSubmit);
+  $owner('closeOwnerFootageRequestModal')?.addEventListener('click', closeOwnerFootageRequest);
+  $owner('ownerFootageQuickCancel')?.addEventListener('click', closeOwnerFootageRequest);
+  footageQuickModal?.addEventListener('click', (e) => {
+    if (e.target === footageQuickModal) closeOwnerFootageRequest();
   });
 
   ownerLogoutBtn?.addEventListener('click', async () => {

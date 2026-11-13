@@ -2389,6 +2389,15 @@ document.getElementById('trackDisplayBranch').textContent = data.branch || '\u20
                     status: 'Insufficient Footage',
                     approvalStatus: 'pending',
                     comments: firebase.firestore.FieldValue.arrayUnion(note),
+                    // Open-request marker, same shape as the owner dashboard's
+                    // (requestOwnerFootage in js/owner-dashboard.js). The
+                    // superadmin's approval flips it to 'answered'.
+                    footageRequest: {
+                        status: 'pending',
+                        requestedBy: userEmail,
+                        requestedByEmail: userEmail === 'anonymous' ? '' : userEmail,
+                        requestedAt: note.requestedAt
+                    },
                     updatedAt: firebase.firestore.FieldValue.serverTimestamp()
                 }).then(function() {
                     resetFootageForm();
