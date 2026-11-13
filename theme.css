@@ -313,3 +313,64 @@ html[data-theme="dark"] #notificationBar {
 /* ----- Theme-aware scrollbars ----- */
 html[data-theme="dark"] ::-webkit-scrollbar-thumb { background: #334564; }
 html[data-theme="dark"] ::-webkit-scrollbar-thumb:hover { background: #46597c; }
+
+/* ============================================================== */
+/*  CONTACT SUPPORT CARD (.support-contact)                        */
+/*  Shared by main, ownerdashboard, login, pending-approval and    */
+/*  submit-ticket. Self-contained colours so it also works on the  */
+/*  login.css pages, which do not load style.css variables.        */
+/* ============================================================== */
+.support-contact {
+    --sc-bg: #EAF6E8;
+    --sc-border: #72BF6A;
+    --sc-text: #1E3A1B;
+    --sc-muted: #3F6B3A;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 12px;
+    background: var(--sc-bg);
+    border: 1px solid rgba(114, 191, 106, 0.45);
+    border-left: 4px solid var(--sc-border);
+    border-radius: 10px;
+    color: var(--sc-text);
+    text-decoration: none;
+    text-align: left;
+    line-height: 1.25;
+    transition: transform 0.15s ease, box-shadow 0.15s ease;
+    overflow: hidden;
+    white-space: nowrap;
+}
+.support-contact:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(114, 191, 106, 0.25);
+    text-decoration: none;
+}
+.support-contact > i {
+    flex-shrink: 0;
+    width: 32px;
+    height: 32px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    background: var(--sc-border);
+    color: #fff;
+    font-size: 0.9rem;
+}
+.support-contact > span { display: flex; flex-direction: column; min-width: 0; }
+.support-contact small { white-space: normal; font-size: 0.72rem; color: var(--sc-muted); font-weight: 500; }
+.support-contact strong { font-size: 0.95rem; font-weight: 700; letter-spacing: 0.02em; }
+
+html[data-theme="dark"] .support-contact {
+    --sc-bg: rgba(114, 191, 106, 0.14);
+    --sc-text: #E2E8F0;
+    --sc-muted: #A8D5A2;
+}
+
+/* Full-width strip variant for the login / pending / track pages */
+.support-contact--block { width: 100%; margin-top: 16px; box-sizing: border-box; white-space: normal; }
+
+/* Collapsed sidebar: icon only */
+.sidebar.collapsed .support-contact { padding: 6px; justify-content: center; border-left-width: 1px; }
+.sidebar.collapsed .support-contact > span { display: none; }

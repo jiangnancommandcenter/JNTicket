@@ -98,6 +98,11 @@
         </div>
 
         <div id="pendingStatus"></div>
+
+        <a class="support-contact support-contact--block" href="tel:+639369239118">
+            <i class="fas fa-headset"></i>
+            <span><small>Questions about your account? Contact Support</small><strong>0936 923 9118</strong></span>
+        </a>
     </div>
 
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
@@ -150,7 +155,7 @@
                     if (status === 'pending') {
                         setStatus('Still pending — a superadmin has not approved this account yet.', true);
                     } else if (status === 'rejected' || status === 'denied') {
-                        setStatus('This account request was not approved. Contact your administrator.', true);
+                        setStatus('This account request was not approved. Contact Support: 0936 923 9118.', true);
                     } else if (status === 'approved' || status === 'active') {
                         setStatus('Approved! Redirecting to login…', false);
                         setTimeout(function () { window.location.href = 'login.html'; }, 1200);

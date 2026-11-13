@@ -620,6 +620,7 @@ const approvalDetailsStatus = $('#approvalDetailsStatus');
 const approvalModalFooter = $('#approvalModalFooter');
 const btnTransferToHr = $('#btnTransferToHr');
 const btnTransferToStore = $('#btnTransferToStore');
+const btnRevertTicketTransfer = $('#btnRevertTicketTransfer');
 const btnRejectApproval = $('#btnRejectApproval');
 // 2-Day tracking access: superadmin-only "Approve Request & Resend", shown on
 // an expired approved ticket ONLY when somebody has asked to reopen it.
@@ -4871,8 +4872,17 @@ window.openApprovalDetails = function(id) {
     // incremented accessResentCount) to a ticket that was closed on purpose.
     const showApproveActions = isPendingApproval(ticket) && currentUserIsSuperAdmin();
     const showResendAction = expiryInfo.expired && reopenPending && currentUserIsSuperAdmin();
-    const showFooter = showApproveActions || showResendAction;
+    // Undo a mistaken Transfer to Store / HR. Only tickets that went through
+    // the HR/Store handoff carry ticketTransferTo, so legacy approvals get none.
+    const showRevertAction = currentUserIsSuperAdmin() && isApprovedTicket(ticket)
+        && (ticket.ticketTransferTo === 'store' || ticket.ticketTransferTo === 'hr');
+    const showFooter = showApproveActions || showResendAction || showRevertAction;
     if (approvalModalFooter) approvalModalFooter.style.display = showFooter ? 'flex' : 'none';
+    if (btnRevertTicketTransfer) {
+        // Real display value — the button ships with .u-hidden (see btnResendAccess).
+        btnRevertTicketTransfer.style.display = showRevertAction ? 'inline-flex' : 'none';
+        btnRevertTicketTransfer.onclick = () => window.revertTicketTransfer(id);
+    }
     if (btnTransferToHr) {
         btnTransferToHr.style.display = showApproveActions ? '' : 'none';
         btnTransferToHr.onclick = () => window.transferTicketToHr(id);
@@ -5469,6 +5479,74 @@ window.transferTicketToStore = async function(id) {
         if (typeof showToast === 'function') showToast('Failed to transfer to Store. Please try again.', 'error');
     }
 };
+
+/**
+ * Undo a mistaken Transfer to Store / Transfer to HR: the ticket returns to
+ * Pending Approval (and off the Area Manager/RM/SM dashboard) so the
+ * superadmin can choose again. A reverted STORE transfer emails the requester
+ * a correction; a reverted HR transfer is silent.
+ */
+window.revertTicketTransfer = async function(id) {
+    if (!currentUserIsSuperAdmin()) return;
+    const ticket = allTickets.find(t => t.id === id) || null;
+    if (!ticket) return;
+    const from = ticket.ticketTransferTo === 'hr' ? 'hr' : 'store';
+    const label = ticket.ticketNumber || id;
+    const confirmed = await showConfirmDialog({
+        title: 'Revert Transfer',
+        message: 'Revert the transfer of ticket <strong>' + escapeHTML(label) + '</strong> to '
+            + (from === 'hr' ? 'HR' : 'Store') + '? It will go back to <strong>Pending Approval</strong>'
+            + (from === 'store' ? ' and be removed from the Area Manager/RM/SM dashboard. The requester will be emailed a correction.' : '.'),
+        confirmText: 'Revert Transfer',
+        danger: true,
+        icon: 'fa-undo'
+    });
+    if (!confirmed) return;
+    const me = auth.currentUser || {};
+    const byEmail = me.email || 'unknown';
+    try {
+        if (btnRevertTicketTransfer) btnRevertTicketTransfer.disabled = true;
+        await firestoreService.revertTicketTransfer(id, byEmail, me.displayName || byEmail, from);
+        if (approvalDetailsModal) approvalDetailsModal.classList.remove('active');
+        currentApprovalTicketId = null;
+        updateApprovalsBadge();
+        applyApprovalFilters(false);
+        if (typeof showToast === 'function') showToast('Transfer reverted. Ticket ' + label + ' is back to Pending Approval.', 'success');
+        if (from === 'store') await notifyRequesterOfTransferRevert(ticket);
+    } catch (error) {
+        console.error('Revert transfer error:', error);
+        if (typeof showToast === 'function') showToast('Failed to revert transfer. Please try again.', 'error');
+    } finally {
+        if (btnRevertTicketTransfer) btnRevertTicketTransfer.disabled = false;
+    }
+};
+
+/** Best-effort correction email after reverting a Store transfer. Never throws. */
+async function notifyRequesterOfTransferRevert(ticket) {
+    try {
+        if (!ticket) return;
+        if (!window.EmailService || typeof window.EmailService.sendTicketTransferRevertEmail !== 'function') {
+            console.warn('Revert Email: js/email.js is not loaded — notification skipped.');
+            return;
+        }
+        if (!window.EmailService.isEmailConfigured()) {
+            if (typeof showToast === 'function') showToast('Transfer reverted — emails are not configured, so no correction was sent.', 'info');
+            return;
+        }
+        if (!window.EmailService.resolveRecipient(ticket)) {
+            if (typeof showToast === 'function') showToast('Transfer reverted — this ticket has no email address, so no correction was sent.', 'info');
+            return;
+        }
+        const result = await window.EmailService.sendTicketTransferRevertEmail(ticket);
+        if (typeof showToast === 'function') {
+            if (result.ok) showToast('Requester notified that the earlier notice was a mistake.', 'success');
+            else if (result.timeout) showToast('Transfer reverted, but the email bridge timed out.', 'error');
+            else showToast('Transfer reverted, but the correction email failed (' + (result.error || result.status) + ').', 'error');
+        }
+    } catch (error) {
+        console.error('Revert correction email failed (the revert itself is unaffected):', error);
+    }
+}
 
 /**
  * Notify the requester that their ticket has been transferred to HR for

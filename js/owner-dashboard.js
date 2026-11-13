@@ -517,6 +517,11 @@ function setActiveUser(permissions, role = 'viewer') {
   // setActiveUser() call, so it is correct on first load and after a re-role.
   syncNewTicketButton();
 
+  // Contact Support card: Area Manager ('owner') + RM/SM only — hidden for HR
+  // and superadmin. Re-evaluated on every setActiveUser() call.
+  const supportContact = document.getElementById('ownerSupportContact');
+  if (supportContact) supportContact.style.display = isAreaManager() ? 'flex' : 'none';
+
   // The approved-only + expiring-window sentence on the Tickets tab, plus the
   // Access column / access filter, which only exist for a role that actually
   // has a viewing window (the Area Manager).
@@ -2426,6 +2431,11 @@ function renderOwnerTickets(allTickets) {
         .map((doc) => normalizeTicketReport(doc))
         .filter((t) => isPendingApprovalTicket(t))
         .filter((t) => t.ticketTransferTo !== 'hr')
+        // A superadmin REVERTED a mistaken Store/HR transfer (stamped by
+        // firestoreService.revertTicketTransfer). Hide it entirely — it must
+        // not reappear as an "Approval still Pending" row. A later Transfer to
+        // Store makes it approved, and the approved path shows it normally.
+        .filter((t) => !t.transferRevertedFrom)
         .filter((t) => {
           const branch = String(t.branch || t.branchName || '').trim();
           return allowedBranches.includes(branch);

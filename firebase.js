@@ -575,6 +575,33 @@ const firestoreService = {
         });
     },
 
+    /**
+     * Undo a mistaken Transfer to Store / Transfer to HR. The ticket goes back
+     * to 'pending_approval' (status stays 'Resolved') so the superadmin can
+     * choose again. The transfer stamps and any opened viewing window are
+     * DELETED so a re-transfer starts clean. `approvedAt` is kept on purpose:
+     * isOpenFootageRequest() compares against it, and the next approval
+     * overwrites it anyway.
+     */
+    async revertTicketTransfer(ticketId, byEmail, byName, fromTarget) {
+        const del = firebase.firestore.FieldValue.delete();
+        await db.collection('tickets').doc(ticketId).update({
+            approvalStatus: 'pending_approval',
+            ticketTransferTo: del,
+            transferredAt: del,
+            transferredBy: del,
+            transferredByName: del,
+            accessOpenedAt: del,
+            accessOpenedBy: del,
+            accessExpiresAt: del,
+            transferRevertedAt: firebase.firestore.FieldValue.serverTimestamp(),
+            transferRevertedBy: byEmail || null,
+            transferRevertedByName: byName || null,
+            transferRevertedFrom: fromTarget || null,
+            updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+        });
+    },
+
 
     /**
      * Stamp when an Area Manager first opens a transferred violation modal.

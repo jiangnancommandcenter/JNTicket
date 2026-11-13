@@ -1617,6 +1617,9 @@
                 <button type="button" class="btn btn-danger" id="btnRejectApproval"><i class="fas fa-times"></i> Reject Report</button>
                 <button type="button" class="btn btn-success" id="btnTransferToHr"><i class="fas fa-user-shield"></i> Transfer to HR</button>
                 <button type="button" class="btn btn-primary" id="btnTransferToStore"><i class="fas fa-store"></i> Transfer to Store</button>
+                <!-- Undo a mistaken Store/HR transfer (back to Pending Approval).
+                     Ships .u-hidden; script.js reveals it with 'inline-flex'. -->
+                <button type="button" class="btn btn-secondary u-hidden" id="btnRevertTicketTransfer"><i class="fas fa-undo"></i> Revert Transfer</button>
             </div>
         </div>
     </div>
