@@ -17,11 +17,12 @@ const NOTIFICATION_SOUND_FALLBACK_URL = 'https://assets.mixkit.co/active_storage
 const NOTIFICATION_ICON_URL = 'tamang-logo-192.png';
 let notificationAudio = null;
 
-// HIGH-priority new tickets play a siren instead of the chime. Same
-// local-first rule as above: sounds/siren.mp3 is a copy of the myinstants
-// "Red Siren Alert", and the myinstants URL is only the fallback.
-const SIREN_SOUND_URL = 'sounds/siren.mp3';
-const SIREN_SOUND_FALLBACK_URL = 'https://www.myinstants.com/media/sounds/red-siren-alert.mp3';
+// HIGH-priority new tickets play an alert instead of the chime. Same
+// local-first rule as above: sounds/high-alert.mp3 is a copy of the
+// myinstants "Among Us alert buzzer", and the myinstants URL is only the
+// fallback. (The previous siren is kept at sounds/siren.mp3.)
+const SIREN_SOUND_URL = 'sounds/high-alert.mp3';
+const SIREN_SOUND_FALLBACK_URL = 'https://www.myinstants.com/media/sounds/alert_tA9mlYb.mp3';
 let sirenAudio = null;
 
 function ensureSirenAudio() {
@@ -30,7 +31,7 @@ function ensureSirenAudio() {
     sirenAudio.preload = 'auto';
     sirenAudio.addEventListener('error', function handleSirenError() {
         sirenAudio.removeEventListener('error', handleSirenError);
-        console.warn('[Desktop Notifications] sounds/siren.mp3 could not load here — using the myinstants copy.');
+        console.warn('[Desktop Notifications] sounds/high-alert.mp3 could not load here — using the myinstants copy.');
         try {
             sirenAudio.src = SIREN_SOUND_FALLBACK_URL;
             sirenAudio.load();
