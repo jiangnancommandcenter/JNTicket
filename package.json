@@ -7,7 +7,7 @@
     "serve": "python -m http.server 5500",
     "reset": "python -m http.server 5501",
     "seed": "node scripts/seed.js",
-    "test": "node --check firebase.js && node --check script.js && node --check js/auth.js && node --check js/notifications.js && node --check js/owner-dashboard.js && node --check js/owner-ticket-form.js && node --check js/email.js && node --check js/email-config.js && node --check js/chat.js && node --check js/chat-unsend.js && node --check js/error-reporter.js && node --check js/command-palette.js && node --check js/onboarding.js && node --check js/violation-report.js && node --check js/attachment-viewer.js && node --check js/video-compressor.js && node --check js/hr-violations.js && node --check js/owner-violations.js && node --check js/remarks.js && node --check scripts/seed.js"
+    "test": "node --check firebase.js && node --check script.js && node --check js/auth.js && node --check js/notifications.js && node --check js/owner-dashboard.js && node --check js/owner-ticket-form.js && node --check js/email.js && node --check js/email-config.js && node --check js/chat.js && node --check js/chat-unsend.js && node --check js/error-reporter.js && node --check js/command-palette.js && node --check js/onboarding.js && node --check js/violation-report.js && node --check js/attachment-viewer.js && node --check js/video-compressor.js && node --check js/hr-violations.js && node --check js/owner-violations.js && node --check js/remarks.js && node --check js/vms-wall.js && node --check js/boot-splash.js && node --check scripts/seed.js"
   },
   "devDependencies": {
     "firebase-admin": "^12.7.0"

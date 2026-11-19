@@ -64,15 +64,15 @@ html[data-theme="dark"] {
     --sidebar-text: #E2E8F0;
     --sidebar-text-muted: #8CA0B8;
     --sidebar-hover: #16233B;
-    --sidebar-active-bg: rgba(114, 191, 106, 0.18);
-    --sidebar-active-text: #B9E9B3;
+    --sidebar-active-bg: rgba(194, 33, 28, 0.18);
+    --sidebar-active-text: #ffffff;
 
     /* Keep status hues recognizable on dark, slightly softened backgrounds */
     --color-online-bg: rgba(22, 163, 74, 0.18);
     --color-offline-bg: rgba(220, 38, 38, 0.18);
     --color-warning-bg: rgba(202, 138, 4, 0.18);
     --color-insufficient-bg: rgba(124, 58, 237, 0.20);
-    --color-primary-bg: rgba(114, 191, 106, 0.16);
+    --color-primary-bg: rgba(194, 33, 28, 0.16);
     --color-danger-bg: rgba(220, 38, 38, 0.16);
     --color-pending-bg: rgba(202, 138, 4, 0.16);
     --color-progress-bg: rgba(37, 99, 235, 0.20);
@@ -322,15 +322,15 @@ html[data-theme="dark"] ::-webkit-scrollbar-thumb:hover { background: #46597c; }
 /* ============================================================== */
 .support-contact {
     --sc-bg: #EAF6E8;
-    --sc-border: #72BF6A;
-    --sc-text: #1E3A1B;
+    --sc-border: #c2211c;
+    --sc-text: #fff8f1;
     --sc-muted: #3F6B3A;
     display: flex;
     align-items: center;
     gap: 10px;
     padding: 10px 12px;
     background: var(--sc-bg);
-    border: 1px solid rgba(114, 191, 106, 0.45);
+    border: 1px solid rgba(194, 33, 28, 0.45);
     border-left: 4px solid var(--sc-border);
     border-radius: 10px;
     color: var(--sc-text);
@@ -343,7 +343,7 @@ html[data-theme="dark"] ::-webkit-scrollbar-thumb:hover { background: #46597c; }
 }
 .support-contact:hover {
     transform: translateY(-1px);
-    box-shadow: 0 4px 12px rgba(114, 191, 106, 0.25);
+    box-shadow: 0 4px 12px rgba(194, 33, 28, 0.25);
     text-decoration: none;
 }
 .support-contact > i {
@@ -363,7 +363,7 @@ html[data-theme="dark"] ::-webkit-scrollbar-thumb:hover { background: #46597c; }
 .support-contact strong { font-size: 0.95rem; font-weight: 700; letter-spacing: 0.02em; }
 
 html[data-theme="dark"] .support-contact {
-    --sc-bg: rgba(114, 191, 106, 0.14);
+    --sc-bg: rgba(194, 33, 28, 0.14);
     --sc-text: #E2E8F0;
     --sc-muted: #A8D5A2;
 }

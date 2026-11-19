@@ -5,7 +5,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Login - CCTV Command Center</title>
     <!-- Pre-paint theme: apply saved dark/light theme BEFORE first paint (no flash) -->
-    <script>(function(){try{var t=localStorage.getItem('rcms_theme');if(!t){t='light';}document.documentElement.setAttribute('data-theme',t);}catch(e){document.documentElement.setAttribute('data-theme','light');}})();</script>
+    <script>(function(){try{var t=localStorage.getItem('rcms_theme');if(!t){t='dark';}document.documentElement.setAttribute('data-theme',t);}catch(e){document.documentElement.setAttribute('data-theme','dark');}})();</script>
+    <script src="js/boot-splash.js"></script>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link rel="preconnect" href="https://www.gstatic.com" crossorigin>
@@ -15,8 +16,7 @@
     <link rel="icon" href="tamang-logo-64.png" type="image/png">
     <link rel="apple-touch-icon" href="tamang-logo-180.png">
     <link rel="manifest" href="manifest.json">
-    <meta name="theme-color" id="themeColorMeta" content="#72bf6a">
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <meta name="theme-color" id="themeColorMeta" content="#0e1319">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
     <link rel="stylesheet" href="login.css">
     <!-- Theme System: dark mode + toggle button styles -->
@@ -24,6 +24,10 @@
     <style>
         .login-box { position: relative; }
     </style>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600;700&family=Barlow+Condensed:wght@500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="jn-ui.css">
 </head>
 <body>
     <!-- Theme toggle (fixed top-right) -->
@@ -31,52 +35,64 @@
         <i class="fas fa-moon"></i>
     </button>
 
-    <div class="login-box">
-        <img src="logo.png" alt="Jiangnan CCTV Logo" class="login-logo">
+    <!-- Decorative caption over the photo background (login-bg.jpg). -->
+    <div class="jn-login-hero" aria-hidden="true">
+        <span class="jn-login-hero-eyebrow"><i></i>LIVE &middot; ALL BRANCHES</span>
+        <h1 class="jn-login-hero-title">Jiangnan<span>CCTV Command Center</span></h1>
+        <p class="jn-login-hero-tag">Every branch, every camera &mdash; one secure console.</p>
+    </div>
 
-        <h2 id="authTitle">Welcome Back</h2>
+    <main class="jn-login jn-login--center">
+        <header class="jn-login-brand">
+            <img src="jn-logo.png" alt="Jiangnan" class="jn-login-logo" width="150" height="150">
+            <p class="jn-login-app">CCTV Command Center</p>
+        </header>
 
-        <!-- ================= LOGIN ================= -->
-        <form id="loginForm">
-            <input id="email" type="email" placeholder="Admin Email" required autocomplete="email">
-            <div class="pw-wrap">
-                <input id="password" type="password" placeholder="Password" required autocomplete="current-password">
-                <button type="button" class="pw-toggle" id="pwToggle" aria-label="Show password" title="Show / hide password"><i class="far fa-eye"></i></button>
+        <div class="login-box">
+            <h2 id="authTitle">Sign in</h2>
+
+            <!-- ================= LOGIN ================= -->
+            <form id="loginForm">
+                <input id="email" type="email" placeholder="Work email" required autocomplete="email">
+                <div class="pw-wrap">
+                    <input id="password" type="password" placeholder="Password" required autocomplete="current-password">
+                    <button type="button" class="pw-toggle" id="pwToggle" aria-label="Show password" title="Show / hide password"><i class="far fa-eye"></i></button>
+                </div>
+                <button id="loginBtn" type="submit">Sign in</button>
+            </form>
+
+            <p id="message"></p>
+
+            <div class="jn-login-row">
+                <a href="#" class="forgot-link" id="forgotLink">Forgot password?</a>
+                <p class="toggle-link">No account? <a href="#" id="showRegister" onclick="showRegisterForm();return false;">Register</a></p>
             </div>
-            <button id="loginBtn" type="submit">LOGIN</button>
-        </form>
 
-        <a href="#" class="forgot-link" id="forgotLink">Forgot password?</a>
+            <!-- ================= REGISTER ================= -->
+            <form id="registerForm" style="display:none;">
+                <input id="regName" type="text" placeholder="Full Name" required autocomplete="name">
+                <input id="regEmail" type="email" placeholder="Work Email" required autocomplete="email">
+                <div class="pw-wrap">
+                    <input id="regPassword" type="password" placeholder="Password (min 6 characters)" required autocomplete="new-password">
+                    <button type="button" class="pw-toggle" id="regPwToggle" aria-label="Show password" title="Show / hide password"><i class="far fa-eye"></i></button>
+                </div>
+                <div class="reg-label">Branches you need</div>
+                <div id="regBranchCheckboxes" class="branch-checkbox-grid">
+                    <p style="font-size:13px;color:#94a3b8;">Loading branches...</p>
+                </div>
+                <button id="registerBtn" type="submit">Send request</button>
+            </form>
 
-        <p id="message"></p>
+            <p id="regMessage"></p>
 
-        <p class="toggle-link">Don't have an account? <a href="#" id="showRegister" onclick="showRegisterForm();return false;">Register</a></p>
-
-        <!-- ================= REGISTER ================= -->
-        <form id="registerForm" style="display:none;">
-            <input id="regName" type="text" placeholder="Full Name" required autocomplete="name">
-            <input id="regEmail" type="email" placeholder="Work Email" required autocomplete="email">
-            <div class="pw-wrap">
-                <input id="regPassword" type="password" placeholder="Password (min 6 characters)" required autocomplete="new-password">
-                <button type="button" class="pw-toggle" id="regPwToggle" aria-label="Show password" title="Show / hide password"><i class="far fa-eye"></i></button>
-            </div>
-            <div class="reg-label">Select branches you need access to:</div>
-            <div id="regBranchCheckboxes" class="branch-checkbox-grid">
-                <p style="font-size:13px;color:#94a3b8;">Loading branches...</p>
-            </div>
-            <button id="registerBtn" type="submit">CREATE ACCOUNT</button>
-        </form>
-
-        <p id="regMessage"></p>
-
-        <p class="toggle-link" id="showLoginWrap" style="display:none;">Already have an account? <a href="#" id="showLogin" onclick="showLoginForm();return false;">Login</a></p>
-
-        <a class="support-contact support-contact--block" href="tel:+639369239118">
-            <i class="fas fa-headset"></i>
-            <span><small>Having trouble signing in? Contact Support</small><strong>0936 923 9118</strong></span>
-        </a>
-
+            <p class="toggle-link" id="showLoginWrap" style="display:none;">Already have an account? <a href="#" id="showLogin" onclick="showLoginForm();return false;">Login</a></p>
         </div>
+
+        <a class="support-contact jn-login-support" href="tel:+639369239118">
+            <i class="fas fa-headset"></i>
+            <span><small>Can't get in? Call IT support</small><strong>0936 923 9118</strong></span>
+        </a>
+    </main>
 
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-firestore.js"></script>
@@ -121,7 +137,8 @@
             if (registerForm) registerForm.style.display = 'block';
             if (showLoginWrap) showLoginWrap.style.display = 'block';
             if (showRegister) showRegister.closest('.toggle-link').style.display = 'none';
-            if (authTitle) authTitle.textContent = 'Create Your Account';
+            if (authTitle) authTitle.textContent = 'Request access';
+            var fl = document.getElementById('forgotLink'); if (fl) fl.style.display = 'none';
             loadRegistrationBranches();
         }
 
@@ -130,7 +147,8 @@
             if (document.getElementById('loginForm')) document.getElementById('loginForm').style.display = 'block';
             if (showLoginWrap) showLoginWrap.style.display = 'none';
             if (showRegister) showRegister.closest('.toggle-link').style.display = 'block';
-            if (authTitle) authTitle.textContent = 'Admin Command Center';
+            if (authTitle) authTitle.textContent = 'Sign in';
+            var fl = document.getElementById('forgotLink'); if (fl) fl.style.display = '';
         }
         window.showRegisterForm = showRegisterForm;
         window.showLoginForm = showLoginForm;
@@ -199,7 +217,7 @@
                 if (!branchesSelected.length) return setMsg('Please select at least one branch.');
 
                 registerBtn.disabled = true;
-                registerBtn.textContent = 'CREATING ACCOUNT...';
+                registerBtn.textContent = 'Sending…';
                 setMsg('', '');
 
                 try {
@@ -224,7 +242,7 @@
                     console.error('Registration error:', err);
                     setMsg(err.message);
                     registerBtn.disabled = false;
-                    registerBtn.textContent = 'CREATE ACCOUNT';
+                    registerBtn.textContent = 'Send request';
                 }
             });
         }

@@ -71,8 +71,8 @@
     --sidebar-text: #0F172A;
     --sidebar-text-muted: #64748B;
     --sidebar-hover: #F1F5F9;
-    --sidebar-active-bg: rgba(114, 191, 106, 0.16);
-    --sidebar-active-text: #1E3A1B;
+    --sidebar-active-bg: rgba(194, 33, 28, 0.16);
+    --sidebar-active-text: #fff8f1;
 
     --color-online: #16a34a;
     --color-online-bg: rgba(22, 163, 74, 0.1);
@@ -89,9 +89,9 @@
     --color-insufficient-bg: rgba(124, 58, 237, 0.1);
     --color-insufficient-border: rgba(124, 58, 237, 0.3);
 
-    --color-primary: #72bf6a;
-    --color-primary-hover: #5aa855;
-    --color-primary-bg: rgba(114, 191, 106, 0.12);
+    --color-primary: #c2211c;
+    --color-primary-hover: #a01b17;
+    --color-primary-bg: rgba(194, 33, 28, 0.12);
 
     --color-danger: #dc2626;
     --color-danger-hover: #b91c1c;
@@ -451,14 +451,14 @@ tr.violation-row-unseen > td:first-child {
 
 .btn-primary {
     background: var(--color-primary);
-    color: #1E3A1B;
+    color: var(--jn-on-red, #fff8f1);
 }
 
 .btn-primary:hover {
     background: var(--color-primary-hover);
     color: #FFFFFF;
     transform: translateY(-1px);
-    box-shadow: 0 4px 15px rgba(114, 191, 106, 0.4);
+    box-shadow: 0 4px 15px rgba(194, 33, 28, 0.4);
 }
 
 .btn-secondary {
@@ -489,7 +489,7 @@ tr.violation-row-unseen > td:first-child {
 }
 
 .btn-add:hover {
-    box-shadow: 0 4px 20px rgba(114, 191, 106, 0.5);
+    box-shadow: 0 4px 20px rgba(194, 33, 28, 0.5);
     transform: translateY(-2px);
 }
 
@@ -686,7 +686,7 @@ tr.violation-row-unseen > td:first-child {
     margin-bottom: 22px;
     border-radius: var(--radius-xl);
     background:
-        radial-gradient(380px 150px at 8% 0%, rgba(114,191,106,0.16), transparent 65%),
+        radial-gradient(380px 150px at 8% 0%, rgba(194, 33, 28,0.16), transparent 65%),
         radial-gradient(440px 180px at 100% 100%, rgba(37,99,235,0.10), transparent 60%),
         linear-gradient(135deg, #0f172a 0%, #1e293b 55%, #233044 100%);
     color: #F8FAFC;
@@ -702,7 +702,7 @@ tr.violation-row-unseen > td:first-child {
     width: 240px;
     height: 240px;
     border-radius: 50%;
-    border: 22px solid rgba(114,191,106,0.10);
+    border: 22px solid rgba(194, 33, 28,0.10);
     pointer-events: none;
 }
 .dash-hero::before {
@@ -724,9 +724,9 @@ tr.violation-row-unseen > td:first-child {
     font-weight: 700;
     letter-spacing: 0.14em;
     text-transform: uppercase;
-    color: #C7F0B0;
-    background: rgba(114,191,106,0.16);
-    border: 1px solid rgba(114,191,106,0.40);
+    color: #ff6a5e;
+    background: rgba(194, 33, 28,0.16);
+    border: 1px solid rgba(194, 33, 28,0.40);
     padding: 4px 12px;
     border-radius: 20px;
     margin-bottom: 9px;
@@ -757,11 +757,11 @@ tr.violation-row-unseen > td:first-child {
     line-height: 1.1;
     color: var(--color-primary);
     letter-spacing: -0.02em;
-    text-shadow: 0 0 24px rgba(114,191,106,0.35);
+    text-shadow: 0 0 24px rgba(194, 33, 28,0.35);
 }
 .dash-hero-date { font-size: 0.74rem; color: #94A3B8; letter-spacing: 0.06em; text-transform: uppercase; }
 .dash-hero-btn {
-    box-shadow: 0 4px 16px rgba(114,191,106,0.45);
+    box-shadow: 0 4px 16px rgba(194, 33, 28,0.45);
     padding: 10px 18px;
     font-weight: 600;
     transition: var(--transition);
@@ -1046,7 +1046,7 @@ tr.violation-row-unseen > td:first-child {
     overflow: hidden;
 }
 .dash-progress-fill { display: block; height: 100%; border-radius: 4px; transition: width 0.6s ease; }
-.dash-progress-fill.readiness { background: linear-gradient(90deg, #72bf6a, #16a34a); }
+.dash-progress-fill.readiness { background: linear-gradient(90deg, #c2211c, #16a34a); }
 .dash-progress-fill.outage { background: linear-gradient(90deg, #fbbf24, #ca8a04); }
 .dash-progress-fill.tickets { background: linear-gradient(90deg, #fbbf24, #d97706); }
 .dash-progress-fill.violations { background: linear-gradient(90deg, #60a5fa, #2563eb); }
@@ -1202,7 +1202,7 @@ tr.violation-row-unseen > td:first-child {
 
 .search-box:focus-within {
     border-color: var(--color-primary);
-    box-shadow: 0 0 0 3px rgba(114, 191, 106, 0.15);
+    box-shadow: 0 0 0 3px rgba(194, 33, 28, 0.15);
 }
 
 .search-box i { color: var(--text-muted); font-size: 0.9rem; }
@@ -1642,7 +1642,7 @@ tr.row-online {
     font-weight: 600;
     cursor: pointer;
     text-decoration: underline;
-    text-decoration-color: rgba(114, 191, 106, 0.3);
+    text-decoration-color: rgba(194, 33, 28, 0.3);
 }
 
 .ticket-link:hover {
@@ -2245,7 +2245,7 @@ branch name, let alone pick one. */
 .form-group textarea:focus {
     outline: none;
     border-color: var(--color-primary);
-    box-shadow: 0 0 0 3px rgba(114, 191, 106, 0.15);
+    box-shadow: 0 0 0 3px rgba(194, 33, 28, 0.15);
 }
 
 .form-group textarea {
@@ -2364,7 +2364,7 @@ branch name, let alone pick one. */
 #tabUsers .quick-access-item:hover,
 #tabUsers .permission-grid .checkbox-label:hover {
     background: var(--bg-hover);
-    border-color: rgba(114, 191, 106, 0.35);
+    border-color: rgba(194, 33, 28, 0.35);
 }
 
 #tabUsers .quick-access-item input,
@@ -3219,7 +3219,7 @@ branch name, let alone pick one. */
     align-items: center;
     justify-content: center;
     background: var(--color-primary-bg, rgba(22, 163, 74, 0.12));
-    color: var(--color-primary-hover, #5aa855);
+    color: var(--color-primary-hover, #a01b17);
     font-size: 1rem;
 }
 
@@ -4024,14 +4024,14 @@ branch name, let alone pick one. */
     flex-wrap: wrap;
     padding: 18px 22px;
     background: linear-gradient(135deg, var(--color-primary-bg), rgba(99, 102, 241, 0.05));
-    border: 1px solid rgba(114, 191, 106, 0.2);
+    border: 1px solid rgba(194, 33, 28, 0.2);
     border-radius: var(--radius-lg);
     margin-bottom: 20px;
     transition: var(--transition);
 }
 
 .print-action-card:hover {
-    border-color: rgba(114, 191, 106, 0.4);
+    border-color: rgba(194, 33, 28, 0.4);
     box-shadow: var(--shadow-sm);
 }
 
@@ -4124,7 +4124,7 @@ branch name, let alone pick one. */
 .print-action-control input[type="month"]:focus {
     outline: none;
     border-color: var(--color-primary);
-    box-shadow: 0 0 0 3px rgba(114, 191, 106, 0.15);
+    box-shadow: 0 0 0 3px rgba(194, 33, 28, 0.15);
 }
 
 .print-action-control input[type="month"]::-webkit-calendar-picker-indicator {
@@ -4614,7 +4614,7 @@ branch name, let alone pick one. */
 .upload-widget .upload-dropzone.dragover {
     border-color: var(--color-primary);
     background: var(--color-primary-bg);
-    box-shadow: 0 0 0 3px rgba(114, 191, 106, 0.15);
+    box-shadow: 0 0 0 3px rgba(194, 33, 28, 0.15);
     transform: scale(1.01);
 }
 
@@ -6417,7 +6417,7 @@ WHAT WAS ACTUALLY BROKEN ON A PHONE, measured at 390px:
     padding: 20px 20px 18px;
     border-top: 1px solid var(--border-color);
     border-bottom: 1px solid var(--border-color);
-    background: linear-gradient(180deg, rgba(15, 23, 42, 0.015), rgba(114, 191, 106, 0.03));
+    background: linear-gradient(180deg, rgba(15, 23, 42, 0.015), rgba(194, 33, 28, 0.03));
     box-shadow: inset 0 0 0 1px rgba(148,163,184,0.12);
     border-radius: 0 0 16px 16px;
 }

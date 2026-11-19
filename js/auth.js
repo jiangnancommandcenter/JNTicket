@@ -212,7 +212,7 @@ if (loginForm) {
         }
 
         loginBtn.disabled = true;
-        loginBtn.textContent = 'LOGGING IN...';
+        loginBtn.textContent = 'Signing in…';
 
         try {
             await auth.signInWithEmailAndPassword(email, password);
@@ -224,7 +224,7 @@ if (loginForm) {
             console.error('Login error:', error);
             if (messageEl) messageEl.textContent = error.message;
             loginBtn.disabled = false;
-            loginBtn.textContent = 'LOGIN';
+            loginBtn.textContent = 'Sign in';
         }
     });
 }

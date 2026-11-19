@@ -17,6 +17,157 @@ const NOTIFICATION_SOUND_FALLBACK_URL = 'https://assets.mixkit.co/active_storage
 const NOTIFICATION_ICON_URL = 'tamang-logo-192.png';
 let notificationAudio = null;
 
+// HIGH-priority new tickets play a siren instead of the chime. Same
+// local-first rule as above: sounds/siren.mp3 is a copy of the myinstants
+// "Red Siren Alert", and the myinstants URL is only the fallback.
+const SIREN_SOUND_URL = 'sounds/siren.mp3';
+const SIREN_SOUND_FALLBACK_URL = 'https://www.myinstants.com/media/sounds/red-siren-alert.mp3';
+let sirenAudio = null;
+
+function ensureSirenAudio() {
+    if (sirenAudio) return sirenAudio;
+    sirenAudio = new Audio(SIREN_SOUND_URL);
+    sirenAudio.preload = 'auto';
+    sirenAudio.addEventListener('error', function handleSirenError() {
+        sirenAudio.removeEventListener('error', handleSirenError);
+        console.warn('[Desktop Notifications] sounds/siren.mp3 could not load here — using the myinstants copy.');
+        try {
+            sirenAudio.src = SIREN_SOUND_FALLBACK_URL;
+            sirenAudio.load();
+            // ⚠️ The play() that hit the 404 is gone — if a siren was asked
+            // for in the last few seconds, play the fallback NOW, otherwise
+            // the first High ticket is silent.
+            if (Date.now() < sirenPlayingUntil) {
+                const p = sirenAudio.play();
+                if (p && p.catch) p.catch((err) => console.warn('[Desktop Notifications] Siren fallback blocked:', err && err.name));
+            }
+        } catch (e) { /* ignore */ }
+    });
+    sirenAudio.load();
+    return sirenAudio;
+}
+
+// ===== BOOSTED PLAYBACK (louder than an <audio> element can go) =====
+// An <audio> element tops out at volume 1. To play the siren and the chat
+// sound at MAX loudness, the local file is decoded once into a Web Audio
+// buffer and played through a gain stage (×SOUND_BOOST_GAIN) followed by a
+// hard limiter (DynamicsCompressor) so the boost does not crackle/clip.
+// Any failure (no Web Audio, file not fetchable, context still locked by the
+// autoplay policy) falls back to the plain element at volume 1.
+const SOUND_BOOST_GAIN = 3;
+const SIREN_DURATION_FALLBACK_MS = 5000;
+let boostCtx = null;
+const boostBuffers = {};
+const boostLoading = {};
+const boostActive = {};
+
+function getBoostCtx() {
+    if (boostCtx) return boostCtx;
+    const Ctx = window.AudioContext || window.webkitAudioContext;
+    if (!Ctx) return null;
+    try { boostCtx = new Ctx(); } catch (e) { boostCtx = null; }
+    return boostCtx;
+}
+
+function loadBoostBuffer(url) {
+    if (boostBuffers[url]) return Promise.resolve(boostBuffers[url]);
+    if (boostLoading[url]) return boostLoading[url];
+    const ctx = getBoostCtx();
+    if (!ctx) return Promise.reject(new Error('Web Audio unsupported'));
+    boostLoading[url] = fetch(url)
+        .then((r) => { if (!r.ok) throw new Error('HTTP ' + r.status); return r.arrayBuffer(); })
+        .then((bytes) => new Promise((resolve, reject) => ctx.decodeAudioData(bytes, resolve, reject)))
+        .then((buf) => { boostBuffers[url] = buf; return buf; })
+        .catch((e) => { delete boostLoading[url]; throw e; });
+    return boostLoading[url];
+}
+
+/**
+ * Play `url` boosted. Returns the clip length in ms when the boosted path
+ * ran, or 0 after calling `fallbackPlay()` instead.
+ */
+function playBoostedSound(url, fallbackPlay) {
+    // Never CREATE or resume the AudioContext here: this runs from Firestore
+    // callbacks, not a user gesture, and Chrome logs "The AudioContext was not
+    // allowed to start". The context is only made/resumed inside a real
+    // click or keypress (see unlockBoostOnGesture); until then the plain
+    // element plays at volume 1.
+    const ctx = boostCtx;
+    const buf = boostBuffers[url];
+    if (!ctx || !buf || ctx.state !== 'running') {
+        if (ctx && ctx.state === 'running') loadBoostBuffer(url).catch(() => {});
+        if (typeof fallbackPlay === 'function') fallbackPlay();
+        return 0;
+    }
+    try {
+        if (boostActive[url]) { try { boostActive[url].stop(); } catch (e) { /* already ended */ } }
+        const src = ctx.createBufferSource();
+        src.buffer = buf;
+        const gain = ctx.createGain();
+        gain.gain.value = SOUND_BOOST_GAIN;
+        const limiter = ctx.createDynamicsCompressor();
+        limiter.threshold.value = -3;
+        limiter.knee.value = 0;
+        limiter.ratio.value = 20;
+        limiter.attack.value = 0.002;
+        limiter.release.value = 0.1;
+        src.connect(gain);
+        gain.connect(limiter);
+        limiter.connect(ctx.destination);
+        src.onended = () => { if (boostActive[url] === src) delete boostActive[url]; };
+        boostActive[url] = src;
+        src.start();
+        return Math.round(buf.duration * 1000);
+    } catch (e) {
+        if (typeof fallbackPlay === 'function') fallbackPlay();
+        return 0;
+    }
+}
+
+// Create/resume the AudioContext and decode the boosted sounds from inside a
+// real user gesture. Stays armed (not once-only) so a context the browser
+// suspends later (e.g. after sleep) is resumed on the next interaction.
+function unlockBoostOnGesture() {
+    try {
+        const ctx = getBoostCtx();
+        if (!ctx) return;
+        if (ctx.state !== 'running') ctx.resume().catch(() => {});
+        loadBoostBuffer(SIREN_SOUND_URL).catch(() => {});
+        loadBoostBuffer('sounds/chat.mp3').catch(() => {});
+    } catch (e) { /* ignore */ }
+}
+['pointerdown', 'keydown', 'touchstart'].forEach((evt) => {
+    document.addEventListener(evt, unlockBoostOnGesture, { capture: true, passive: true });
+});
+
+// While the siren is sounding, the ordinary chime is suppressed so the two
+// never play on top of each other.
+let sirenPlayingUntil = 0;
+
+function playSirenSound() {
+    try {
+        // Cut any chime that is already playing.
+        if (notificationAudio) { try { notificationAudio.pause(); notificationAudio.currentTime = 0; } catch (e) { /* ignore */ } }
+        const ms = playBoostedSound(SIREN_SOUND_URL, () => {
+            const a = ensureSirenAudio();
+            a.pause();
+            a.currentTime = 0;
+            a.volume = 1;
+            const p = a.play();
+            if (p && p.catch) p.catch((err) => {
+                // NotSupportedError = file missing (the error handler above
+                // retries with the fallback); NotAllowedError = autoplay block.
+                console.warn('[Desktop Notifications] Siren play() rejected:', err && err.name, '| src =', a.currentSrc || a.src);
+            });
+        });
+        console.log('[Desktop Notifications] SIREN played via', ms ? 'boosted Web Audio' : 'plain <audio> element');
+        const dur = ms ||(sirenAudio && isFinite(sirenAudio.duration) ? sirenAudio.duration * 1000 : SIREN_DURATION_FALLBACK_MS);
+        sirenPlayingUntil = Date.now() + dur;
+    } catch (e) {
+        console.warn('[Desktop Notifications] Siren play failed:', e);
+    }
+}
+
 function preloadNotificationSound() {
     try {
         if (!notificationAudio) {
@@ -24,6 +175,7 @@ function preloadNotificationSound() {
             notificationAudio.preload = 'auto';
             notificationAudio.load();
         }
+        ensureSirenAudio();
     } catch (e) {
         console.warn('[Desktop Notifications] Sound preload failed:', e);
     }
@@ -31,6 +183,10 @@ function preloadNotificationSound() {
 
 function playNotificationSound() {
     try {
+        // A High-ticket siren is sounding: never layer the chime on top of it.
+        if (Date.now() < sirenPlayingUntil) return;
+        // Diagnostic: shows WHICH code path asked for the chime.
+        console.log('[Desktop Notifications] chime played by:', new Error().stack.split('\n').slice(2, 4).join(' <- ').trim());
         if (!notificationAudio) {
             // Single `new Audio` construction: the CDN fallback swaps the SRC
             // on the same element instead of building a second object.
@@ -629,8 +785,11 @@ function notifyNewTicket(ticket) {
     if (!docId || notifiedDocIds.has(docId)) return;
     notifiedDocIds.add(docId);
 
-    // 1. Play notification sound
-    playNotificationSound();
+    // 1. Play sound: siren for High priority, the usual chime otherwise
+    const isHigh = String(ticket.priority || 'Low').trim().toLowerCase() === 'high';
+    console.log('[Desktop Notifications] New ticket', ticket.ticketNumber || docId,
+        '| priority =', JSON.stringify(ticket.priority), '| sound =', isHigh ? 'SIREN' : 'chime');
+    if (isHigh) playSirenSound(); else playNotificationSound();
 
     // 2. Show desktop notification if permitted (no UI nag if not granted)
     if (Notification.permission === 'granted') {
@@ -684,6 +843,23 @@ function armAudioUnlockOnLogin() {
             const p = notificationAudio.play();
             if (p && p.then) p.then(restore, restore);
             else restore();
+        } catch (e) { /* ignore */ }
+        // (Web Audio for the boosted sounds is unlocked by
+        // unlockBoostOnGesture, which listens for every gesture.)
+        // Silently unlock the siren element too (the fallback path).
+        try {
+            if (!sirenAudio) return;
+            sirenAudio.volume = 0;
+            const restoreSiren = function () {
+                try {
+                    sirenAudio.pause();
+                    sirenAudio.currentTime = 0;
+                    sirenAudio.volume = 1;
+                } catch (e) { /* ignore */ }
+            };
+            const ps = sirenAudio.play();
+            if (ps && ps.then) ps.then(restoreSiren, restoreSiren);
+            else restoreSiren();
         } catch (e) { /* ignore */ }
     });
 }
@@ -781,5 +957,8 @@ window.notifyViolationTransferred = notifyViolationTransferred;
 // Audio object, and the "reuse the shared, preloaded notification sound" path
 // in playIncomingSound() is dead code that can never run.
 window.playNotificationSound = playNotificationSound;
+window.playSirenSound = playSirenSound;
+// Used by js/chat.js to play the chat sound at boosted (max) volume.
+window.playBoostedSound = playBoostedSound;
 window.testNotificationSound = testNotificationSound;
 window.armAudioUnlockOnLogin = armAudioUnlockOnLogin;

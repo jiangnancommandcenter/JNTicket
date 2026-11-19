@@ -737,8 +737,8 @@ function renderOwnerOverviewCharts() {
   const reduceMotion = (typeof window.matchMedia === 'function')
     && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
-  const brand = ownerChartToken('--color-primary', '#72bf6a');
-  const brandBg = ownerChartToken('--color-primary-bg', 'rgba(114,191,106,0.15)');
+  const brand = ownerChartToken('--color-primary', '#e5352b');
+  const brandBg = ownerChartToken('--color-primary-bg', 'rgba(229,53,43,0.14)');
   const tick = ownerChartToken('--text-secondary', '#94A3B8');
   const grid = ownerChartToken('--border-color', '#24334D');
   const card = ownerChartToken('--bg-card', '#FFFFFF');

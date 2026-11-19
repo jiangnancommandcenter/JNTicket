@@ -28,7 +28,7 @@
     border: 1px solid var(--border-color);
 
     background: linear-gradient(135deg, var(--color-primary), var(--color-primary-hover));
-    color: #1E3A1B;
+    color: var(--jn-on-red, #fff8f1);
 
     display: inline-flex;
     align-items: center;
@@ -85,8 +85,8 @@
 
 .chat-launcher:hover {
     transform: translateY(-2px) scale(1.04);
-    box-shadow: 0 8px 26px rgba(114, 191, 106, 0.5);
-    color: #1E3A1B;
+    box-shadow: 0 8px 26px rgba(194, 33, 28, 0.45);
+    color: var(--jn-on-red, #fff8f1);
 }
 
 .chat-launcher:focus-visible {
@@ -1838,7 +1838,7 @@ body.chat-ticket-open .modal-overlay {
 
 @keyframes chatLauncherPulse {
     0%, 100% { box-shadow: 0 8px 30px rgba(15, 23, 42, 0.14); }
-    50%      { box-shadow: 0 8px 30px rgba(114, 191, 106, 0.75); }
+    50%      { box-shadow: 0 8px 30px rgba(194, 33, 28, 0.75); }
 }
 
 @media (prefers-reduced-motion: reduce) {

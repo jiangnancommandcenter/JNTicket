@@ -17,7 +17,7 @@
     /* Keeps the browser/OS chrome (address bar on mobile, task switcher) in the
        same colour as the app. Dark mode here is opt-in rather than
        prefers-color-scheme-driven, so the meta tag cannot be a static value. */
-    const THEME_COLOR = { light: '#72bf6a', dark: '#0B1220' };
+    const THEME_COLOR = { light: '#0e1319', dark: '#0e1319' };
 
     function updateThemeColorMeta() {
         var meta = document.getElementById('themeColorMeta');
@@ -76,10 +76,10 @@
             var saved = null;
             try { saved = localStorage.getItem(THEME_KEY); } catch (e) { /* ignore */ }
             if (!saved) {
-                // Default theme is LIGHT. The OS/browser preference is
-                // deliberately ignored so a user on a dark-mode machine still
-                // lands on the light UI; dark is opt-in via the toggle button.
-                saved = 'light';
+                // Default theme is DARK (control-room look). The OS/browser preference is
+                // deliberately ignored so a user on a light-mode machine still
+                // lands on the dark UI; light (day mode) is opt-in via the toggle.
+                saved = 'dark';
             }
             document.documentElement.setAttribute('data-theme', saved);
         }

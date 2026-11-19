@@ -1,0 +1,1445 @@
+/* ==================================================================
+   JIANGNAN CCTV COMMAND CENTER — "control room" interface (jn-ui.css)
+
+   Loaded LAST on every page (after style.css, theme.css, chat.css,
+   tailwind.css and each page's inline <style>), so it re-skins the app
+   without touching markup IDs or script hooks.
+
+   Direction: security-console / VMS software. Dark slate panels with a
+   title strip, LED status lights, monospace clocks and codes, and the
+   logo red as the one accent. Dark is the default; light is "day mode".
+   The left rail stays dark in both.
+   ================================================================== */
+
+/* ------------------------------------------------------------ tokens */
+:root,
+html[data-theme="dark"] {
+    --v-page: #0e1319;
+    --v-panel: #151c24;
+    --v-strip: #111820;
+    --v-raise: #1b2430;
+    --v-input: #0f151c;
+    --v-line: #24303c;
+    --v-line-2: #334252;
+    --v-ink: #dbe3ea;
+    --v-ink-2: #9caab7;
+    --v-ink-3: #66788a;
+    --v-red: #e5352b;
+    --v-red-2: #ff4b40;
+    --v-red-ink: #ff6b62;
+    --v-red-wash: rgba(229, 53, 43, .14);
+    --led-on: #2fd27a;
+    --led-off: #ff4b40;
+    --led-warn: #f5b13d;
+    --led-info: #4ea8ff;
+    --led-idle: #5b6b7b;
+    --v-glow: 0 0 6px;
+    --v-shadow: 0 18px 40px -14px rgba(0, 0, 0, .7);
+    color-scheme: dark;
+}
+html[data-theme="light"] {
+    --v-page: #e7ebef;
+    --v-panel: #ffffff;
+    --v-strip: #f2f4f7;
+    --v-raise: #f7f9fb;
+    --v-input: #ffffff;
+    --v-line: #d4dbe2;
+    --v-line-2: #bcc6d0;
+    --v-ink: #131a22;
+    --v-ink-2: #46535f;
+    --v-ink-3: #74828f;
+    --v-red: #d22a21;
+    --v-red-2: #b3221b;
+    --v-red-ink: #c0241c;
+    --v-red-wash: rgba(210, 42, 33, .08);
+    --led-on: #1a9d55;
+    --led-off: #d22a21;
+    --led-warn: #c47f00;
+    --led-info: #1f6fd1;
+    --led-idle: #8a96a2;
+    --v-glow: 0 0 0;
+    --v-shadow: 0 18px 40px -16px rgba(19, 26, 34, .35);
+    color-scheme: light;
+}
+
+:root, html[data-theme="dark"], html[data-theme="light"] {
+    /* legacy tokens read by style.css / theme.css / chat.css / login.css */
+    --bg-primary: var(--v-page);
+    --bg-secondary: var(--v-panel);
+    --bg-tertiary: var(--v-strip);
+    --bg-card: var(--v-panel);
+    --bg-hover: var(--v-raise);
+    --bg-input: var(--v-input);
+    --text-primary: var(--v-ink);
+    --text-secondary: var(--v-ink-2);
+    --text-muted: var(--v-ink-3);
+    --border-color: var(--v-line);
+    --border-light: var(--v-line-2);
+
+    --sidebar-bg: #0a0e13;
+    --sidebar-border: #1a222b;
+    --sidebar-text: #aab6c2;
+    --sidebar-text-muted: #5d6c7a;
+    --sidebar-hover: #121921;
+    --sidebar-active-bg: #17202a;
+    --sidebar-active-text: #ffffff;
+
+    --color-primary: var(--v-red);
+    --color-primary-hover: var(--v-red-2);
+    --color-primary-bg: var(--v-red-wash);
+    --color-online: var(--led-on);
+    --color-online-bg: color-mix(in srgb, var(--led-on) 12%, transparent);
+    --color-online-border: color-mix(in srgb, var(--led-on) 40%, transparent);
+    --color-offline: var(--led-off);
+    --color-offline-bg: color-mix(in srgb, var(--led-off) 12%, transparent);
+    --color-offline-border: color-mix(in srgb, var(--led-off) 40%, transparent);
+    --color-warning: var(--led-warn);
+    --color-warning-bg: color-mix(in srgb, var(--led-warn) 12%, transparent);
+    --color-warning-border: color-mix(in srgb, var(--led-warn) 40%, transparent);
+    --color-pending: var(--led-warn);
+    --color-pending-bg: color-mix(in srgb, var(--led-warn) 12%, transparent);
+    --color-pending-border: color-mix(in srgb, var(--led-warn) 40%, transparent);
+    --color-progress: var(--led-info);
+    --color-progress-bg: color-mix(in srgb, var(--led-info) 12%, transparent);
+    --color-progress-border: color-mix(in srgb, var(--led-info) 40%, transparent);
+    --color-resolved: var(--led-on);
+    --color-resolved-bg: color-mix(in srgb, var(--led-on) 12%, transparent);
+    --color-resolved-border: color-mix(in srgb, var(--led-on) 40%, transparent);
+    --color-danger: var(--v-red-ink);
+    --color-danger-hover: var(--v-red-2);
+    --color-danger-bg: var(--v-red-wash);
+    --color-danger-border: color-mix(in srgb, var(--v-red) 45%, transparent);
+    --color-insufficient: #a78bfa;
+    --color-insufficient-bg: rgba(167, 139, 250, .12);
+    --color-insufficient-border: rgba(167, 139, 250, .4);
+
+    --chat-bubble-out: #1f6fd1;
+
+    --radius-sm: 2px;
+    --radius-md: 3px;
+    --radius-lg: 4px;
+    --radius-xl: 4px;
+    --shadow-sm: none;
+    --shadow-md: none;
+    --shadow-lg: var(--v-shadow);
+    --card-highlight: transparent;
+    --skeleton-base: var(--v-raise);
+    --skeleton-sheen: color-mix(in srgb, var(--v-ink) 6%, transparent);
+    --sidebar-width: 16.2857rem;
+
+    --l-bg: var(--v-page);
+    --l-box-bg: var(--v-panel);
+    --l-border: var(--v-line);
+    --l-text: var(--v-ink);
+    --l-text-muted: var(--v-ink-3);
+    --l-text-secondary: var(--v-ink-2);
+    --l-input-bg: var(--v-input);
+    --l-grid-bg: var(--v-strip);
+    --l-check-bg: var(--v-raise);
+    --l-check-text: var(--v-ink-2);
+    --l-focus: var(--v-red);
+    --l-focus-ring: var(--v-red-wash);
+
+    --v-sans: 'Barlow', 'Segoe UI', system-ui, sans-serif;
+    --v-cond: 'Barlow Condensed', 'Barlow', 'Arial Narrow', sans-serif;
+    --v-mono: 'JetBrains Mono', Consolas, ui-monospace, monospace;
+}
+
+/* -------------------------------------------------------------- base */
+html, body, button, input, select, textarea { font-family: var(--v-sans); }
+body {
+    background: var(--v-page);
+    color: var(--v-ink);
+    -webkit-font-smoothing: antialiased;
+}
+::selection { background: var(--v-red); color: #fff; }
+:focus-visible { outline: 2px solid var(--led-info); outline-offset: 1px; }
+* { scrollbar-color: var(--v-line-2) transparent; scrollbar-width: thin; }
+*:not([class*="spinner"]) { text-shadow: none !important; }
+
+/* No decorative lift / slide motion. */
+.card:hover, .btn:hover, .btn-primary:hover, .btn-add:hover, .dash-hero-btn:hover,
+.dash-kpi:hover, .review-card:hover, .stat-card:hover, .chat-launcher:hover {
+    transform: none !important;
+}
+.tab-content { animation: none !important; }
+
+h1, h2, h3, .page-title, .section-header h2, .section-title,
+.modal-header h2, .modal-header h3, .form-title h2, .dash-hero-title {
+    font-family: var(--v-cond);
+    letter-spacing: .03em;
+}
+
+@keyframes v-blink { 50% { opacity: .25; } }
+
+/* ============================================================= SIDEBAR */
+.sidebar {
+    background: var(--sidebar-bg) !important;
+    border-right: 1px solid var(--sidebar-border) !important;
+    box-shadow: none !important;
+}
+.sidebar-header {
+    padding: 1.1429rem 1.2857rem !important;
+    min-height: 0 !important;
+    border-bottom: 1px solid var(--sidebar-border) !important;
+    background: transparent !important;
+}
+/* The Jiangnan logo is dark-on-transparent; render it white on the rail. */
+.sidebar .brand-logo {
+    display: block !important;
+    height: 2.4286rem !important;
+    filter: brightness(0) invert(1) !important;
+    opacity: .95;
+    margin: 0 auto !important;
+    /* Bigger logo WITHOUT growing the sidebar header: scale is visual only,
+       so the header keeps its original height. */
+    transform: scale(1.4) !important;   /* theme.css forces transform:none !important */
+    transform-origin: center !important;
+}
+.sidebar-header .logo { overflow: visible !important; }
+/* Logo sits centred in the rail header (main + owner dashboard). */
+.sidebar-header { justify-content: center !important; }
+.sidebar-header .logo { flex: 1 1 auto; justify-content: center !important; }
+.sidebar-nav { padding: 0.4286rem 0 !important; gap: 0 !important; }
+.nav-section-label {
+    font: 600 0.7143rem/1 var(--v-mono) !important;
+    letter-spacing: .14em !important;
+    text-transform: uppercase !important;
+    color: #4f5e6c !important;
+    padding: 1.1429rem 1.2857rem 0.4286rem !important;
+    margin: 0 !important;
+    border: 0 !important;
+}
+.nav-section-label::before, .nav-section-label::after { display: none !important; }
+.sidebar .nav-item {
+    gap: 0.7857rem !important;
+    padding: 0.6429rem 1.2857rem 0.6429rem 1.1429rem !important;
+    margin: 0 !important;
+    border-radius: 0 !important;
+    border-left: 2px solid transparent !important;
+    background: transparent !important;
+    color: var(--sidebar-text) !important;
+    font: 500 1rem/1.2 var(--v-sans) !important;
+    box-shadow: none !important;
+}
+.sidebar .nav-item i { font-size: 0.9286rem !important; width: 1.1429rem !important; color: #5d6c7a !important; }
+.sidebar .nav-item:hover { background: var(--sidebar-hover) !important; color: #fff !important; }
+.sidebar .nav-item:hover i { color: #aab6c2 !important; }
+.sidebar .nav-item.active {
+    background: var(--sidebar-active-bg) !important;
+    color: #fff !important;
+    border-left-color: var(--v-red) !important;
+    font-weight: 600 !important;
+}
+.sidebar .nav-item.active i { color: var(--v-red-2) !important; }
+.sidebar .badge {
+    font: 600 0.75rem/1 var(--v-mono) !important;
+    background: var(--v-red) !important;
+    color: #fff !important;
+    border-radius: 2px !important;
+    padding: 3px 0.4286rem !important;
+    min-width: 0 !important;
+    box-shadow: none !important;
+}
+.sidebar-footer {
+    border-top: 1px solid var(--sidebar-border) !important;
+    padding: 0.8571rem 1.2857rem 1rem !important;
+    background: transparent !important;
+}
+.current-datetime {
+    font: 500 0.8214rem/1.4 var(--v-mono) !important;
+    color: #8796a5 !important;
+    background: #0d1218 !important;
+    border: 1px solid var(--sidebar-border) !important;
+    border-radius: 3px !important;
+    padding: 0.5rem 0.7143rem !important;
+    margin-bottom: 0.7143rem !important;
+}
+.current-datetime i { color: #2fd27a !important; font-size: 0.7143rem; }
+.logout-btn-sidebar {
+    background: transparent !important;
+    border: 1px solid #222c37 !important;
+    border-radius: 3px !important;
+    color: #aab6c2 !important;
+    font: 500 0.9286rem/1 var(--v-sans) !important;
+    padding: 0.6429rem 0.8571rem !important;
+    box-shadow: none !important;
+}
+.logout-btn-sidebar:hover { color: #fff !important; border-color: #e5352b !important; background: #121921 !important; }
+.sidebar.collapsed .sidebar-header { padding: 1rem 0.5714rem !important; justify-content: center !important; }
+
+/* =============================================================== HEADER */
+.top-header {
+    background: var(--v-panel) !important;
+    border-bottom: 1px solid var(--v-line) !important;
+    padding: 0 1.7143rem !important;
+    min-height: 3.7143rem !important;
+    box-shadow: none !important;
+    backdrop-filter: none !important;
+}
+.page-title {
+    font: 600 1.5rem/1 var(--v-cond) !important;
+    text-transform: uppercase;
+    letter-spacing: .05em !important;
+    color: var(--v-ink) !important;
+}
+.header-subtitle {
+    background: transparent !important;
+    border: 0 !important;
+    border-left: 1px solid var(--v-line-2) !important;
+    border-radius: 0 !important;
+    padding: 2px 0 2px 0.8571rem !important;
+    font: 500 0.8214rem/1.2 var(--v-mono) !important;
+    color: var(--v-ink-3) !important;
+}
+.header-auth-status {
+    font: 500 0.8214rem/1.2 var(--v-mono) !important;
+    color: var(--v-ink-2) !important;
+    background: var(--v-strip) !important;
+    border: 1px solid var(--v-line) !important;
+    border-radius: 3px !important;
+    padding: 0.4286rem 0.7143rem !important;
+}
+.header-auth-status .auth-dot { box-shadow: var(--v-glow) var(--led-on); }
+.icon-btn, .menu-toggle {
+    background: var(--v-strip) !important;
+    border: 1px solid var(--v-line) !important;
+    border-radius: 3px !important;
+    color: var(--v-ink-2) !important;
+    box-shadow: none !important;
+}
+.icon-btn:hover, .menu-toggle:hover { border-color: var(--v-line-2) !important; color: var(--v-ink) !important; background: var(--v-raise) !important; }
+
+/* ============================================================== BUTTONS */
+.btn, button.btn, a.btn {
+    font: 600 0.9286rem/1 var(--v-sans) !important;
+    letter-spacing: .02em;
+    border-radius: 3px !important;
+    box-shadow: none !important;
+    background-image: none !important;
+    padding: 0.6429rem 1.0714rem;
+    gap: 0.5rem;
+}
+.btn-sm { padding: 0.4286rem 0.7857rem !important; font-size: 0.8571rem !important; }
+.btn-primary, .btn-add, .dash-hero-btn {
+    background: var(--v-red) !important;
+    color: #fff !important;
+    border: 1px solid var(--v-red) !important;
+}
+.btn-primary:hover, .btn-add:hover, .dash-hero-btn:hover {
+    background: var(--v-red-2) !important;
+    border-color: var(--v-red-2) !important;
+    color: #fff !important;
+}
+.btn-secondary {
+    background: var(--v-raise) !important;
+    color: var(--v-ink) !important;
+    border: 1px solid var(--v-line-2) !important;
+}
+.btn-secondary:hover { border-color: var(--v-ink-3) !important; }
+.btn-danger {
+    background: transparent !important;
+    color: var(--v-red-ink) !important;
+    border: 1px solid var(--color-danger-border) !important;
+}
+.btn-danger:hover { background: var(--v-red) !important; color: #fff !important; border-color: var(--v-red) !important; }
+.btn-icon, .action-btn, .history-action-btn, .btn-view, .btn-remove {
+    border-radius: 3px !important;
+    box-shadow: none !important;
+    background-image: none !important;
+}
+.btn-icon, .action-btn {
+    background: var(--v-raise) !important;
+    border: 1px solid var(--v-line) !important;
+    color: var(--v-ink-2) !important;
+}
+.btn-icon:hover, .action-btn:hover { border-color: var(--v-line-2) !important; color: var(--v-ink) !important; }
+/* State tints must beat the neutral .action-btn reset above — otherwise the
+   NOV "files attached" and Remarks "has a note" flags are invisible. */
+.action-btn.upload-indicator.has-uploads,
+.action-btn.remarks.has-remarks {
+    background: var(--v-red-wash) !important;
+    border-color: var(--v-red) !important;
+    color: var(--v-red-ink) !important;
+}
+.action-btn.upload-indicator.has-uploads:hover,
+.action-btn.remarks.has-remarks:hover {
+    background: var(--v-red) !important;
+    border-color: var(--v-red) !important;
+    color: #fff !important;
+}
+
+/* ============================================================== CONTENT */
+.tab-content { padding: 1.4286rem 1.7143rem 3.4286rem !important; }
+.section-header {
+    align-items: center !important;
+    margin: 1.5714rem 0 0.8571rem !important;
+    padding: 0 !important;
+    border: 0 !important;
+}
+.section-header h2 {
+    display: flex; align-items: center; gap: 0.5714rem;
+    font: 600 1.0714rem/1 var(--v-cond) !important;
+    text-transform: uppercase;
+    letter-spacing: .1em !important;
+    color: var(--v-ink-2) !important;
+}
+.section-header h2 i { font-size: 0.8571rem; color: var(--v-ink-3) !important; margin: 0 !important; }
+.section-header p, .u-section-sub {
+    font: 400 0.8929rem/1.4 var(--v-sans) !important;
+    color: var(--v-ink-3) !important;
+    margin-top: 0.2857rem !important;
+}
+
+/* --- Dashboard hero → console status bar --- */
+.dash-hero {
+    background: var(--v-panel) !important;
+    background-image: none !important;
+    color: var(--v-ink) !important;
+    border: 1px solid var(--v-line) !important;
+    border-radius: 4px !important;
+    box-shadow: none !important;
+    padding: 1rem 1.2857rem !important;
+    margin-bottom: 1rem !important;
+}
+.dash-hero::before, .dash-hero::after { display: none !important; }
+.dash-eyebrow {
+    background: transparent !important;
+    border: 0 !important;
+    box-shadow: none !important;
+    padding: 0 !important;
+    border-radius: 0 !important;
+    font: 600 0.7857rem/1 var(--v-mono) !important;
+    letter-spacing: .12em !important;
+    color: var(--v-red-ink) !important;
+    margin-bottom: 0.5714rem !important;
+}
+.dash-eyebrow i { display: none !important; }
+.dash-eyebrow::before {
+    content: ''; display: inline-block; width: 0.5714rem; height: 0.5714rem; border-radius: 50%;
+    background: var(--v-red); box-shadow: var(--v-glow) var(--v-red);
+    margin-right: 0.5714rem;
+    animation: v-blink 1.2s steps(1) infinite;
+}
+@media (prefers-reduced-motion: reduce) { .dash-eyebrow::before { animation: none; } }
+.dash-hero-title {
+    font: 600 1.8571rem/1.05 var(--v-cond) !important;
+    text-transform: uppercase;
+    letter-spacing: .04em !important;
+    color: var(--v-ink) !important;
+}
+.dash-hero-sub { color: var(--v-ink-2) !important; font: 500 0.8929rem/1.4 var(--v-mono) !important; margin-top: 0.4286rem !important; }
+.dash-hero-time {
+    font: 500 2.1429rem/1 var(--v-mono) !important;
+    color: var(--v-ink) !important;
+    letter-spacing: 0 !important;
+}
+.dash-hero-date { font: 500 0.7857rem/1.6 var(--v-mono) !important; color: var(--v-ink-3) !important; letter-spacing: .06em !important; }
+
+/* --- KPI cards → instrument tiles --- */
+.summary-cards { gap: 0.8571rem !important; margin-bottom: 1.2857rem !important; }
+.card {
+    background: var(--v-panel) !important;
+    border: 1px solid var(--v-line) !important;
+    border-radius: 4px !important;
+    box-shadow: none !important;
+}
+.card::before { display: none !important; }
+.summary-cards > .card { padding: 1rem 1.1429rem !important; }
+.summary-cards > .card:hover { border-color: var(--v-line-2) !important; background: var(--v-raise) !important; }
+.card-icon {
+    background: transparent !important;
+    width: auto !important; height: auto !important;
+    font-size: 0.8571rem !important;
+    color: var(--v-ink-3) !important;
+    border-radius: 0 !important;
+}
+.card-label {
+    font: 600 0.75rem/1.3 var(--v-mono) !important;
+    letter-spacing: .1em !important;
+    text-transform: uppercase !important;
+    color: var(--v-ink-3) !important;
+}
+.card-value {
+    font: 600 2.1429rem/1.1 var(--v-mono) !important;
+    letter-spacing: -.02em !important;
+    color: var(--v-ink) !important;
+}
+.card-online .card-value, .card-resolved .card-value { color: var(--led-on) !important; }
+.card-outage .card-value, .card-offline .card-value { color: var(--led-off) !important; }
+.card-pending .card-value { color: var(--led-warn) !important; }
+.card-progress .card-value { color: var(--led-info) !important; }
+.card-readiness .card-value { color: var(--v-ink) !important; }
+.card-delta, .dash-kpi-trend {
+    font: 500 0.7857rem/1.3 var(--v-mono) !important;
+    background: transparent !important;
+    border: 0 !important;
+    padding: 0 !important;
+}
+.dash-progress { background: var(--v-strip) !important; height: 0.2857rem !important; border-radius: 0 !important; box-shadow: none !important; }
+.dash-progress-fill { border-radius: 0 !important; background: var(--led-on) !important; box-shadow: none !important; }
+.dash-progress-fill.outage { background: var(--led-off) !important; }
+.dash-progress-fill.tickets { background: var(--led-warn) !important; }
+.dash-progress-fill.violations { background: var(--led-info) !important; }
+
+/* --- alert strip --- */
+.dash-alert {
+    background: var(--v-red-wash) !important;
+    color: var(--v-ink) !important;
+    border: 1px solid var(--color-danger-border) !important;
+    border-left: 3px solid var(--v-red) !important;
+    border-radius: 3px !important;
+    box-shadow: none !important;
+    font-family: var(--v-mono);
+    font-size: 0.8929rem;
+}
+.dash-alert i { color: var(--v-red-ink) !important; }
+
+/* --- panels --- */
+.chart-container, .chart-card, .dash-panel, .dash-card, .owner-panel, .quick-status, .print-action-card,
+.form-card, .review-card, .stat-card, .uptime-card, .violation-browser, .violation-tree-panel,
+.user-detail-panel, .upload-widget {
+    background: var(--v-panel) !important;
+    background-image: none !important;
+    border: 1px solid var(--v-line) !important;
+    border-radius: 4px !important;
+    box-shadow: none !important;
+}
+.dash-panel h3, .chart-card h3, .chart-container h3 {
+    font: 600 0.9286rem/1.2 var(--v-cond) !important;
+    letter-spacing: .1em !important;
+    text-transform: uppercase !important;
+    color: var(--v-ink-2) !important;
+}
+
+/* =============================================================== TABLES */
+.table-container {
+    background: var(--v-panel) !important;
+    border: 1px solid var(--v-line) !important;
+    border-radius: 4px !important;
+    box-shadow: none !important;
+}
+.data-table thead, .data-table thead th { background: var(--v-strip) !important; }
+.data-table th {
+    font: 600 0.75rem/1.2 var(--v-mono) !important;
+    letter-spacing: .08em !important;
+    color: var(--v-ink-3) !important;
+    border-bottom: 1px solid var(--v-line);
+}
+.data-table td { border-bottom-color: var(--v-line); font-size: 0.9643rem; }
+.data-table tbody td { background: transparent !important; }
+.data-table tbody tr:hover { background: var(--v-raise) !important; }
+.ticket-link, .ticket-number, .ticket-id, [class*="ticket-no"] {
+    font-family: var(--v-mono) !important;
+    font-weight: 600 !important;
+}
+.ticket-link { color: var(--led-info) !important; text-decoration: none; }
+.ticket-link:hover { text-decoration: underline; }
+input[type="checkbox"], input[type="radio"] { accent-color: var(--v-red); }
+
+/* status chips: LED + mono label */
+.status-badge {
+    font: 600 0.75rem/1 var(--v-mono) !important;
+    letter-spacing: .06em !important;
+    text-transform: uppercase !important;
+    padding: 0.3571rem 0.5714rem !important;
+    border-radius: 3px !important;
+    box-shadow: none !important;
+    gap: 0.5rem !important;
+}
+.status-badge::before { width: 0.5rem !important; height: 0.5rem !important; border-radius: 50% !important; }
+.status-badge.online::before, .status-badge.resolved::before { box-shadow: var(--v-glow) var(--led-on); }
+.status-badge.offline::before { box-shadow: var(--v-glow) var(--led-off); }
+.status-badge.pending::before, .status-badge.warning::before { box-shadow: var(--v-glow) var(--led-warn); }
+.role-badge, .priority-badge, .severity-badge {
+    font-family: var(--v-mono) !important;
+    border-radius: 3px !important;
+    box-shadow: none !important;
+}
+
+/* ================================================================ FORMS */
+.toolbar { gap: 0.5714rem !important; }
+.search-box {
+    background: var(--v-input) !important;
+    border: 1px solid var(--v-line-2) !important;
+    border-radius: 3px !important;
+    box-shadow: none !important;
+}
+.search-box:focus-within { border-color: var(--led-info) !important; }
+.search-box input, .search-box input:focus { background: transparent !important; border: 0 !important; box-shadow: none !important; outline: 0 !important; }
+.form-group input, .form-group select, .form-group textarea,
+.toolbar select, .u-input, .track-input,
+.modal-container input:not([type="checkbox"]):not([type="radio"]):not([type="file"]),
+.modal-container select, .modal-container textarea {
+    background-color: var(--v-input) !important;
+    border: 1px solid var(--v-line-2) !important;
+    border-radius: 3px !important;
+    color: var(--v-ink) !important;
+    box-shadow: none !important;
+}
+.form-group input:focus, .form-group select:focus, .form-group textarea:focus,
+.modal-container input:focus, .modal-container select:focus, .modal-container textarea:focus,
+.toolbar select:focus, .u-input:focus, .track-input:focus {
+    border-color: var(--led-info) !important;
+    box-shadow: 0 0 0 2px color-mix(in srgb, var(--led-info) 25%, transparent) !important;
+    outline: none !important;
+}
+.form-group label, .track-form-group label, .modal-field label {
+    font: 600 0.7857rem/1.3 var(--v-sans) !important;
+    letter-spacing: .06em !important;
+    text-transform: uppercase !important;
+    color: var(--v-ink-3) !important;
+}
+.form-group label i, .track-form-group label i { color: var(--v-ink-3) !important; }
+.segmented-btn {
+    border: 1px solid var(--v-line-2) !important;
+    background: var(--v-input) !important;
+    font: 600 0.8571rem/1 var(--v-mono) !important;
+    text-transform: uppercase;
+    box-shadow: none !important;
+}
+.segmented-btn.active, .segmented-btn.selected, .segmented-btn[aria-pressed="true"] {
+    background: var(--v-raise) !important;
+    border-color: var(--led-info) !important;
+    color: var(--v-ink) !important;
+}
+input[type="file"]::file-selector-button {
+    font: 600 0.8571rem/1 var(--v-sans);
+    background: var(--v-raise);
+    color: var(--v-ink);
+    border: 1px solid var(--v-line-2);
+    border-radius: 3px;
+    padding: 0.5rem 0.8571rem;
+    margin-right: 0.7143rem;
+    cursor: pointer;
+}
+
+/* ================================================================= MODALS */
+.modal-overlay {
+    background: rgba(5, 8, 11, .72) !important;
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+}
+.modal-container {
+    background: var(--v-panel) !important;
+    border: 1px solid var(--v-line-2) !important;
+    border-radius: 4px !important;
+    box-shadow: var(--v-shadow) !important;
+    animation: none !important;
+}
+.modal-header {
+    background: var(--v-strip) !important;
+    background-image: none !important;
+    border-bottom: 1px solid var(--v-line) !important;
+}
+.modal-header h2, .modal-header h3 {
+    font: 600 1.2143rem/1.1 var(--v-cond) !important;
+    text-transform: uppercase;
+    letter-spacing: .06em !important;
+    color: var(--v-ink) !important;
+}
+.modal-header h2 i, .modal-header h3 i { color: var(--v-red-ink) !important; font-size: .8em; }
+.modal-close {
+    background: transparent !important;
+    border: 1px solid var(--v-line) !important;
+    border-radius: 3px !important;
+    color: var(--v-ink-2) !important;
+}
+.modal-close:hover { border-color: var(--v-red) !important; color: var(--v-red-ink) !important; }
+.modal-section-title, .detail-head {
+    font: 600 0.75rem/1.3 var(--v-mono) !important;
+    letter-spacing: .1em !important;
+    text-transform: uppercase !important;
+    color: var(--v-ink-3) !important;
+}
+.form-actions { border-top: 1px solid var(--v-line) !important; }
+
+/* ============================================================ MISC UI */
+.pagination button, .pagination .page-btn {
+    font-family: var(--v-mono) !important;
+    border-radius: 3px !important;
+    box-shadow: none !important;
+}
+.pagination button.active, .pagination .page-btn.active {
+    background: var(--v-red) !important;
+    border-color: var(--v-red) !important;
+    color: #fff !important;
+}
+.bulk-bar {
+    background: var(--v-raise) !important;
+    border: 1px solid var(--v-line-2) !important;
+    border-radius: 4px !important;
+    box-shadow: var(--v-shadow) !important;
+    font-family: var(--v-mono);
+}
+.toast-notification, .toast {
+    background: var(--v-raise) !important;
+    color: var(--v-ink) !important;
+    border: 1px solid var(--v-line-2) !important;
+    border-left: 3px solid var(--led-info) !important;
+    border-radius: 3px !important;
+    box-shadow: var(--v-shadow) !important;
+    backdrop-filter: none !important;
+}
+.toast-notification.success, .toast.success { border-left-color: var(--led-on) !important; }
+.toast-notification.error, .toast.error { border-left-color: var(--led-off) !important; }
+.notification-bar {
+    background: var(--v-raise) !important;
+    color: var(--v-ink) !important;
+    border-bottom: 2px solid var(--v-red) !important;
+    box-shadow: none !important;
+    font-family: var(--v-mono);
+    font-size: 0.8929rem;
+}
+.cmd-palette, .cmd-palette-panel, .shortcut-sheet {
+    background: var(--v-panel) !important;
+    border: 1px solid var(--v-line-2) !important;
+    border-radius: 4px !important;
+    box-shadow: var(--v-shadow) !important;
+}
+kbd {
+    font-family: var(--v-mono) !important;
+    background: var(--v-raise) !important;
+    border: 1px solid var(--v-line-2) !important;
+    border-radius: 3px !important;
+    box-shadow: none !important;
+}
+.tour-card, .onboarding-card, .tour-popover {
+    background: var(--v-raise) !important;
+    color: var(--v-ink) !important;
+    border: 1px solid var(--v-line-2) !important;
+    border-top: 2px solid var(--v-red) !important;
+    border-radius: 4px !important;
+    box-shadow: var(--v-shadow) !important;
+}
+.empty-state { color: var(--v-ink-3) !important; }
+.empty-state p { font-family: var(--v-mono); font-size: 0.8571rem; }
+
+/* healthy states: LED green (style.css used the brand colour for these) */
+.uptime-fill.good { background: var(--led-on) !important; }
+.uptime-pct.good { color: var(--led-on) !important; }
+.uptime-chip.good { color: var(--led-on) !important; background: var(--color-online-bg) !important; }
+.uptime-bar { height: 0.4286rem !important; background: var(--v-strip) !important; border: 1px solid var(--v-line) !important; border-radius: 0 !important; }
+.uptime-fill { border-radius: 0 !important; }
+.uptime-pct, .uptime-meta { font-family: var(--v-mono) !important; }
+
+/* ================================================================ CHAT */
+.chat-launcher {
+    background: var(--v-red) !important;
+    background-image: none !important;
+    color: #fff !important;
+    border: 0 !important;
+    box-shadow: 0 8px 22px -6px rgba(0, 0, 0, .6) !important;
+}
+.chat-launcher:hover { background: var(--v-red-2) !important; }
+.chat-modal-container {
+    background: var(--v-panel) !important;
+    border: 1px solid var(--v-line-2) !important;
+    border-radius: 4px !important;
+    box-shadow: var(--v-shadow) !important;
+}
+
+/* =================================================== CAMERA WALL (new)
+   Dashboard grid of branch tiles, rendered by js/vms-wall.js. */
+.vms-wall {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(12rem, 1fr));
+    gap: 0.5714rem;
+    margin-bottom: 1.2857rem;
+}
+.vms-tile {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    gap: 0.7143rem;
+    min-height: 7.1429rem;
+    padding: 0.7143rem 0.8571rem 0.7857rem;
+    text-align: left;
+    background: var(--v-panel);
+    border: 1px solid var(--v-line);
+    border-radius: 4px;
+    color: var(--v-ink);
+    cursor: pointer;
+    font: inherit;
+    overflow: hidden;
+}
+/* viewfinder corners, like a camera feed */
+.vms-tile::before, .vms-tile::after {
+    content: ''; position: absolute; width: 0.7143rem; height: 0.7143rem; pointer-events: none;
+    border-color: var(--v-line-2); border-style: solid;
+}
+.vms-tile::before { right: 0.4286rem; top: 0.4286rem; border-width: 1px 1px 0 0; }
+.vms-tile::after { left: 0.4286rem; bottom: 0.4286rem; border-width: 0 0 1px 1px; }
+.vms-tile:hover { border-color: var(--v-line-2); background: var(--v-raise); }
+.vms-tile.is-off {
+    border-color: color-mix(in srgb, var(--led-off) 55%, transparent);
+    background: color-mix(in srgb, var(--led-off) 7%, var(--v-panel));
+}
+.vms-tile.is-off::before, .vms-tile.is-off::after { border-color: var(--led-off); }
+.vms-tile-head { display: flex; align-items: center; justify-content: space-between; gap: 0.5714rem; padding-right: 1rem; }
+.vms-tile-cam { font: 500 0.7143rem/1 var(--v-mono); color: var(--v-ink-3); letter-spacing: .06em; }
+.vms-led { width: 0.5714rem; height: 0.5714rem; border-radius: 50%; flex: none; background: var(--led-idle); }
+.vms-tile.is-on .vms-led { background: var(--led-on); box-shadow: var(--v-glow) var(--led-on); }
+.vms-tile.is-off .vms-led { background: var(--led-off); box-shadow: var(--v-glow) var(--led-off); animation: v-blink 1.2s steps(1) infinite; }
+@media (prefers-reduced-motion: reduce) { .vms-tile.is-off .vms-led { animation: none; } }
+.vms-tile-name {
+    font: 600 1.1429rem/1.15 var(--v-cond);
+    text-transform: uppercase;
+    letter-spacing: .04em;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.vms-tile-foot { margin-top: auto; display: flex; align-items: baseline; justify-content: space-between; gap: 0.5714rem; }
+.vms-tile-state { font: 600 0.7857rem/1 var(--v-mono); letter-spacing: .08em; color: var(--v-ink-3); }
+.vms-tile.is-on .vms-tile-state { color: var(--led-on); }
+.vms-tile.is-off .vms-tile-state { color: var(--led-off); }
+.vms-tile-time { font: 500 0.7857rem/1 var(--v-mono); color: var(--v-ink-3); white-space: nowrap; }
+.vms-tile.is-off .vms-tile-time { color: var(--v-ink); }
+.vms-wall-legend { font: 500 0.8214rem/1 var(--v-mono); color: var(--v-ink-3); display: flex; gap: 1rem; align-items: center; flex-wrap: wrap; }
+.vms-wall-legend b { color: var(--v-ink); font-weight: 600; }
+.vms-wall-legend .off b { color: var(--led-off); }
+
+/* ============================================================ AUTH PAGES
+   login.html + pending-approval.html: one console window on a grid. */
+body:has(> .login-box) {
+    background: var(--v-page) !important;
+}
+body:has(> .login-box) .login-box {
+    max-width: 28.5714rem !important;
+    background: var(--v-panel) !important;
+    border: 1px solid var(--v-line-2) !important;
+    border-radius: 4px !important;
+    box-shadow: var(--v-shadow) !important;
+    padding: 0 1.8571rem 1.5714rem !important;
+    text-align: left !important;
+    overflow: hidden;
+}
+/* window title strip */
+body:has(> .login-box) .login-box::before {
+    content: '\25CF  REC \00a0\00a0 SECURE ACCESS';
+    display: block;
+    margin: 0 -1.8571rem 1.5714rem;
+    padding: 0.6429rem 1.1429rem;
+    background: var(--v-strip);
+    border-bottom: 1px solid var(--v-line);
+    font: 600 0.75rem/1 var(--v-mono);
+    letter-spacing: .12em;
+    color: var(--v-ink-3);
+}
+.login-box .login-logo {
+    display: block;
+    height: 5.4286rem !important;
+    width: 5.4286rem !important;
+    object-fit: contain;
+    margin: 0 0 1rem !important;
+    border-radius: 6px;
+}
+.login-box h2 {
+    font: 600 1.7143rem/1.1 var(--v-cond) !important;
+    text-transform: uppercase;
+    letter-spacing: .05em !important;
+    color: var(--v-ink) !important;
+    margin-bottom: 1.4286rem !important;
+}
+.login-box input:not([type="checkbox"]):not([type="radio"]) {
+    height: 3.1429rem !important;
+    background: var(--v-input) !important;
+    border: 1px solid var(--v-line-2) !important;
+    border-radius: 3px !important;
+    color: var(--v-ink) !important;
+    box-shadow: none !important;
+    margin-bottom: 0.8571rem !important;
+}
+.login-box input:focus { border-color: var(--led-info) !important; box-shadow: 0 0 0 2px color-mix(in srgb, var(--led-info) 25%, transparent) !important; }
+.login-box button[type="submit"] {
+    height: 3.1429rem !important;
+    background: var(--v-red) !important;
+    background-image: none !important;
+    color: #fff !important;
+    border: 0 !important;
+    border-radius: 3px !important;
+    font: 600 1rem/1 var(--v-sans) !important;
+    letter-spacing: .04em !important;
+    box-shadow: none !important;
+    transform: none !important;
+}
+.login-box button[type="submit"]:hover { background: var(--v-red-2) !important; }
+.pw-toggle { color: var(--v-ink-3) !important; background: transparent !important; }
+.forgot-link, .back-link { color: var(--v-ink-3) !important; font-size: 0.8929rem !important; }
+.forgot-link:hover, .back-link:hover { color: var(--led-info) !important; }
+.toggle-link { color: var(--v-ink-2) !important; }
+.toggle-link a { color: var(--led-info) !important; }
+#message, #regMessage { color: var(--v-red-ink) !important; font-family: var(--v-mono); font-size: 0.8571rem !important; }
+.reg-label { font: 600 0.7857rem/1.3 var(--v-sans) !important; letter-spacing: .06em !important; color: var(--v-ink-3) !important; }
+.branch-checkbox-grid { background: var(--v-input) !important; border: 1px solid var(--v-line) !important; border-radius: 3px !important; }
+.checkbox-label { background: var(--v-raise) !important; border: 1px solid var(--v-line) !important; border-radius: 3px !important; color: var(--v-ink-2) !important; }
+.checkbox-label:has(input:checked) { border-color: var(--led-info) !important; color: var(--v-ink) !important; }
+.support-contact {
+    background: var(--v-strip) !important;
+    border: 1px solid var(--v-line) !important;
+    border-radius: 3px !important;
+    box-shadow: none !important;
+    color: var(--v-ink) !important;
+}
+.support-contact i { color: var(--v-ink-3) !important; background: transparent !important; }
+.support-contact small { color: var(--v-ink-3) !important; }
+.support-contact strong { font-family: var(--v-mono) !important; color: var(--v-ink) !important; }
+.floating-theme-toggle {
+    background: var(--v-panel) !important;
+    border: 1px solid var(--v-line) !important;
+    border-radius: 3px !important;
+    color: var(--v-ink-2) !important;
+    box-shadow: none !important;
+}
+.status-icon { background: var(--color-pending-bg) !important; color: var(--led-warn) !important; border-radius: 4px !important; box-shadow: none !important; }
+.pending-email { font-family: var(--v-mono) !important; background: var(--v-input) !important; border: 1px solid var(--v-line) !important; border-radius: 3px !important; color: var(--v-ink) !important; }
+.pending-note { background: var(--v-strip) !important; border: 1px solid var(--v-line) !important; border-left: 3px solid var(--led-warn) !important; border-radius: 3px !important; color: var(--v-ink-2) !important; }
+.pending-actions button {
+    background: var(--v-raise) !important;
+    background-image: none !important;
+    border: 1px solid var(--v-line-2) !important;
+    border-radius: 3px !important;
+    color: var(--v-ink) !important;
+    box-shadow: none !important;
+}
+.pending-actions button:first-child { background: var(--v-red) !important; border-color: var(--v-red) !important; color: #fff !important; }
+
+/* ======================================================= SUBMIT TICKET */
+.form-card { border-radius: 4px !important; padding: 1.8571rem 2rem !important; }
+.ticket-form-logo { border-bottom: 1px solid var(--v-line) !important; padding-bottom: 1.1429rem !important; }
+.ticket-form-logo .login-logo { width: 4rem !important; height: 4rem !important; border-radius: 6px; }
+.form-title h2 {
+    font: 600 1.7143rem/1.1 var(--v-cond) !important;
+    text-transform: uppercase;
+    letter-spacing: .05em !important;
+    color: var(--v-ink) !important;
+}
+.form-title p { color: var(--v-ink-2) !important; font-size: 0.9286rem !important; }
+
+/* ======================================== MOBILE (Tailwind "Option-2" blocks) */
+@media (max-width: 899px) {
+    #mainContent > header.jn2-mobile-only {
+        background: var(--v-panel) !important;
+        border-bottom: 1px solid var(--v-line) !important;
+        box-shadow: none !important;
+        backdrop-filter: none !important;
+    }
+    #jn2HeaderTitle {
+        font: 600 1.3571rem/1 var(--v-cond) !important;
+        text-transform: uppercase;
+        letter-spacing: .05em;
+        color: var(--v-ink) !important;
+    }
+    #mainContent > header.jn2-mobile-only .animate-pulse {
+        background: var(--v-red) !important;
+        --tw-ring-color: transparent !important;
+        box-shadow: var(--v-glow) var(--v-red) !important;
+        width: 0.5714rem !important; height: 0.5714rem !important;
+    }
+    #mainContent > header.jn2-mobile-only button { border-radius: 3px !important; }
+    #mainContent > header.jn2-mobile-only i { color: var(--v-ink-2) !important; }
+    #mainContent > header.jn2-mobile-only #openChatModal span { background: var(--v-red) !important; --tw-ring-color: var(--v-panel) !important; }
+    #jn2AvatarInitial {
+        background: var(--v-raise) !important;
+        color: var(--v-ink) !important;
+        border: 1px solid var(--v-line-2);
+        --tw-ring-color: transparent !important;
+        box-shadow: none !important;
+        border-radius: 3px !important;
+        font-family: var(--v-mono) !important;
+    }
+    #openProfile > span { background: var(--led-on) !important; border-color: var(--v-panel) !important; }
+
+    #tabDashboard > section.jn2-mobile-only {
+        background: var(--v-panel) !important;
+        background-image: none !important;
+        border: 1px solid var(--v-line) !important;
+        border-radius: 4px !important;
+        box-shadow: none !important;
+        color: var(--v-ink) !important;
+    }
+    #tabDashboard > section.jn2-mobile-only > div:first-child > span:first-child {
+        background: transparent !important;
+        border: 0 !important;
+        padding: 0 !important;
+        color: var(--v-red-ink) !important;
+        font-family: var(--v-mono) !important;
+    }
+    #tabDashboard > section.jn2-mobile-only > div:first-child > span:first-child i { color: var(--v-red-ink) !important; }
+    #jn2BannerTime {
+        background: var(--v-input) !important;
+        border: 1px solid var(--v-line) !important;
+        box-shadow: none !important;
+        color: var(--v-ink) !important;
+        font-family: var(--v-mono) !important;
+        border-radius: 3px !important;
+    }
+    #tabDashboard > section.jn2-mobile-only h2 {
+        font: 600 1.5714rem/1.05 var(--v-cond) !important;
+        text-transform: uppercase;
+        letter-spacing: .04em;
+        color: var(--v-ink) !important;
+    }
+    #jn2BannerSub { color: var(--v-ink-2) !important; font-family: var(--v-mono); }
+    #jn2BannerDate { color: var(--v-ink-3) !important; font-family: var(--v-mono) !important; }
+    #tabDashboard > section.jn2-mobile-only > div:last-child { border-top-color: var(--v-line) !important; }
+    #openBranchMonitor {
+        background: var(--v-raise) !important;
+        border: 1px solid var(--v-line-2) !important;
+        color: var(--v-ink) !important;
+        border-radius: 3px !important;
+        box-shadow: none !important;
+    }
+    #openBranchMonitor i { color: var(--led-on) !important; }
+    #openStatusModal {
+        background: var(--v-red) !important;
+        color: #fff !important;
+        border-radius: 3px !important;
+        box-shadow: none !important;
+        --tw-ring-color: transparent !important;
+    }
+    .jn2-fab {
+        background: var(--v-red) !important;
+        color: #fff !important;
+        border-radius: 4px !important;
+        box-shadow: 0 8px 22px -6px rgba(0, 0, 0, .6) !important;
+    }
+
+    .tab-content { padding: 1rem 0.8571rem 2.8571rem !important; }
+    .top-header { padding: 0.5714rem 0.8571rem !important; flex-wrap: nowrap !important; gap: 0.5714rem !important; }
+    .top-header .header-subtitle { display: none !important; }
+    .page-title { font-size: 1.3571rem !important; white-space: nowrap; }
+    .summary-cards { grid-template-columns: 1fr 1fr !important; gap: 0.5714rem !important; }
+    .card-value { font-size: 1.7143rem !important; }
+    .section-header { align-items: flex-start !important; }
+    .vms-wall { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.4286rem; }
+    .vms-tile { min-height: 6.1429rem; }
+    .owner-subhead { background: var(--v-strip) !important; border-bottom: 1px solid var(--v-line) !important; color: var(--v-ink-2) !important; }
+}
+
+@media print {
+    .sidebar, .top-header, .jn2-mobile-only, .vms-wall { display: none !important; }
+}
+
+/* ================================================================ LOGIN
+   login.html: JN logo centered on top, sign-in card, support line below. */
+body:has(.jn-login) {
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    min-height: 100vh;
+    padding: 2.8571rem 1.1429rem !important;
+    background: var(--v-page) !important;
+}
+.jn-login {
+    width: 100%;
+    max-width: 27.1429rem;
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+}
+.jn-login-brand { text-align: center; margin-bottom: 1.5714rem; }
+.jn-login-logo {
+    display: block;
+    width: 9.7143rem;
+    height: 9.7143rem;
+    object-fit: contain;
+    margin: 0 auto 0.7143rem;
+}
+/* The logo has white lettering; the light page swaps in a dark-lettered copy. */
+html[data-theme="light"] .jn-login-logo { content: url("jn-logo-dark.png"); }
+.jn-login-app {
+    margin: 0;
+    font: 600 0.8929rem/1 var(--v-mono);
+    letter-spacing: .26em;
+    text-transform: uppercase;
+    color: var(--v-ink-2);
+}
+.jn-login .login-box {
+    width: 100%;
+    max-width: none !important;
+    margin: 0 !important;
+    padding: 1.7143rem 1.7143rem 1.4286rem !important;
+    text-align: left !important;
+    background: var(--v-panel) !important;
+    border: 1px solid var(--v-line-2) !important;
+    border-radius: 6px !important;
+    box-shadow: var(--v-shadow) !important;
+}
+.jn-login .login-box h2 {
+    font: 600 1.4286rem/1 var(--v-cond) !important;
+    letter-spacing: .06em !important;
+    margin: 0 0 1.2857rem !important;
+}
+.jn-login #message:empty, .jn-login #regMessage:empty { display: none; }
+.jn-login #message, .jn-login #regMessage { margin: 0.8571rem 0 0 !important; text-align: left; }
+.jn-login-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.8571rem;
+    margin-top: 1rem;
+    font-size: 0.9286rem;
+}
+.jn-login-row .forgot-link { margin: 0 !important; }
+.jn-login-row .toggle-link, .jn-login #showLoginWrap { margin: 0 !important; font-size: 0.9286rem !important; }
+.jn-login #showLoginWrap { margin-top: 1rem !important; text-align: center; }
+.jn-login .jn-login-support {
+    display: flex !important;
+    align-items: center;
+    justify-content: center;
+    gap: 0.7143rem;
+    margin: 1.2857rem 0 0 !important;
+    padding: 0 !important;
+    background: transparent !important;
+    border: 0 !important;
+    text-decoration: none;
+    text-align: left;
+}
+.jn-login-support span { display: flex; flex-direction: column; gap: 2px; }
+.jn-login-support small { font-size: 0.8214rem !important; }
+.jn-login-support strong { font-size: 1rem !important; }
+@media (max-width: 480px) {
+    body:has(.jn-login) { align-items: flex-start !important; padding-top: 7vh !important; }
+    .jn-login-logo { width: 8rem; height: 8rem; }
+    .jn-login .login-box { padding: 1.4286rem 1.2857rem 1.2857rem !important; }
+}
+.jn-login .pw-toggle { top: 0.3571rem !important; }
+
+/* ======================================================== LOGIN — PHOTO
+   login.html only. The command-centre photo (login-bg.jpg, made from
+   command.png) fills the screen on the left and melts into a warm charcoal
+   panel on the right that holds the logo and the form. Always the dark look,
+   whatever the theme toggle says; the toggle still drives the dashboards. */
+html[data-theme]:has(.jn-login) {
+    --v-page: #0e1319;
+    --v-panel: #151c24;
+    --v-strip: #111820;
+    --v-raise: #1b2430;
+    --v-input: #0f151c;
+    --v-line: #24303c;
+    --v-line-2: #334252;
+    --v-ink: #ece4d8;
+    --v-ink-2: #b9ad9c;
+    --v-ink-3: #8a7f70;
+    --v-red: #e5352b;
+    --v-red-2: #ff4b40;
+    --v-red-ink: #ff6b62;
+    --jn-gold: #c9a36a;
+    --jn-gold-soft: rgba(201, 163, 106, .35);
+    --jn-panel: rgba(17, 13, 11, .88);
+    color-scheme: dark;
+}
+html[data-theme] body .jn-login .jn-login-logo { content: url("jn-logo.png"); }
+
+/* Photo layer */
+body:has(.jn-login) {
+    display: block !important;
+    padding: 0 !important;
+    min-height: 100vh;
+    overflow-x: hidden;
+    background: #0e1319 !important;
+}
+body:has(.jn-login)::before {
+    content: '';
+    position: fixed;
+    /* Desktop: the photo fills only the area LEFT of the panel, framed so
+       both the dining room and the CCTV wall stay in view. */
+    top: 0;
+    bottom: 0;
+    left: 0;
+    right: clamp(380px, 34vw, 480px);
+    z-index: 0;
+    pointer-events: none;
+    background:
+        radial-gradient(120% 90% at 40% 45%, transparent 45%, rgba(8, 6, 5, .65) 100%),
+        linear-gradient(180deg, rgba(8, 6, 5, .35) 0%, transparent 28%, transparent 62%, rgba(8, 6, 5, .78) 100%),
+        url("login-bg.jpg") 82% center / cover no-repeat;
+    transform-origin: 70% 50%;
+    /* Slow, endless Ken Burns drift so the scene feels alive. Never below
+       scale 1.06, so the small shifts can't expose an edge. */
+    transform: scale(1.06);
+    will-change: transform;
+    animation: jnLoginDrift 45s ease-in-out infinite;
+}
+@keyframes jnLoginDrift {
+    0%   { transform: scale(1.06) translate(0, 0); }
+    33%  { transform: scale(1.09) translate(-1.2%, -0.6%); }
+    66%  { transform: scale(1.07) translate(1%, 0.5%); }
+    100% { transform: scale(1.06) translate(0, 0); }
+}
+/* "Breathing" light: warm glow over the lanterns, cool glow over the CCTV
+   wall, slowly pulsing. Above the photo, below the caption and the card. */
+body:has(.jn-login)::after {
+    content: '';
+    position: fixed;
+    top: 0;
+    bottom: 0;
+    left: 0;
+    right: clamp(380px, 34vw, 480px);
+    z-index: 0;
+    pointer-events: none;
+    background:
+        radial-gradient(28rem 20rem at 22% 30%, rgba(255, 186, 102, .55), transparent 70%),
+        radial-gradient(22rem 16rem at 8% 22%, rgba(255, 170, 90, .45), transparent 70%),
+        radial-gradient(30rem 18rem at 85% 42%, rgba(120, 170, 255, .30), transparent 70%);
+    mix-blend-mode: soft-light;
+    animation: jnLoginBreathe 7s ease-in-out infinite alternate;
+}
+@keyframes jnLoginBreathe { from { opacity: .55; } to { opacity: 1; } }
+
+/* Caption over the photo, bottom-left */
+.jn-login-hero {
+    position: fixed;
+    left: 4.5vw;
+    bottom: 8vh;
+    z-index: 1;
+    max-width: calc(100vw - clamp(380px, 34vw, 480px) - 14vw);
+    color: #fff;
+    pointer-events: none;
+    text-shadow: 0 2px 18px rgba(0, 0, 0, .55);
+    animation: jnLoginRise .6s .15s ease-out both;
+}
+.jn-login-hero-eyebrow {
+    display: inline-flex;
+    align-items: center;
+    gap: .6rem;
+    padding: .35rem .75rem;
+    border: 1px solid var(--jn-gold-soft);
+    border-radius: 999px;
+    background: rgba(10, 8, 7, .45);
+    font: 600 .75rem/1 var(--v-mono);
+    letter-spacing: .2em;
+    color: #e9dcc6;
+}
+.jn-login-hero-eyebrow i {
+    width: .5rem;
+    height: .5rem;
+    border-radius: 50%;
+    background: #2fd27a;
+    box-shadow: 0 0 8px #2fd27a;
+    animation: jnLoginBlink 2.4s ease-in-out infinite;
+}
+@keyframes jnLoginBlink { 50% { opacity: .35; } }
+.jn-login-hero-title {
+    margin: 1rem 0 .5rem;
+    font: 700 clamp(2.6rem, 4.6vw, 4.2rem)/.95 var(--v-cond);
+    letter-spacing: .04em;
+    text-transform: uppercase;
+}
+.jn-login-hero-title span {
+    display: block;
+    margin-top: .45rem;
+    font: 600 clamp(1rem, 1.6vw, 1.35rem)/1.1 var(--v-cond);
+    letter-spacing: .32em;
+    color: var(--jn-gold);
+}
+.jn-login-hero-tag {
+    margin: 0;
+    max-width: 30rem;
+    font: 400 1rem/1.5 var(--v-sans);
+    color: rgba(255, 255, 255, .78);
+}
+
+/* Right-hand panel */
+.jn-login {
+    position: relative;
+    z-index: 2;
+    width: clamp(380px, 34vw, 480px) !important;
+    max-width: none !important;
+    min-height: 100vh;
+    margin-left: auto;
+    padding: 3rem clamp(2rem, 3vw, 3rem);
+    justify-content: center;
+    background: linear-gradient(180deg, rgba(20, 15, 12, .9), rgba(14, 19, 25, .94));
+    -webkit-backdrop-filter: blur(8px);
+    backdrop-filter: blur(8px);
+    border-left: 1px solid var(--jn-gold-soft);
+    box-shadow: -30px 0 60px -20px rgba(0, 0, 0, .6);
+    animation: jnLoginSlide .45s ease-out both;
+}
+/* The soft melt from photo into panel */
+.jn-login::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    right: 100%;
+    width: 18vw;
+    pointer-events: none;
+    background: linear-gradient(90deg, transparent, rgba(14, 11, 9, .55));
+}
+@keyframes jnLoginSlide { from { opacity: 0; transform: translateX(24px); } to { opacity: 1; transform: none; } }
+@keyframes jnLoginRise { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: none; } }
+
+.jn-login .jn-login-brand { margin-bottom: 2rem; }
+.jn-login .jn-login-logo { width: 8.5rem; height: 8.5rem; filter: drop-shadow(0 6px 18px rgba(0, 0, 0, .45)); }
+.jn-login .jn-login-app { color: var(--jn-gold); letter-spacing: .3em; }
+.jn-login .jn-login-app::after {
+    content: '';
+    display: block;
+    width: 2.5rem;
+    height: 1px;
+    margin: .9rem auto 0;
+    background: var(--jn-gold-soft);
+}
+
+/* The card dissolves into the panel */
+.jn-login .login-box {
+    background: transparent !important;
+    border: 0 !important;
+    box-shadow: none !important;
+    padding: 0 !important;
+}
+.jn-login .login-box h2 { color: #f4ece0 !important; letter-spacing: .14em !important; }
+.jn-login .login-box input:not([type="checkbox"]):not([type="radio"]) {
+    background: rgba(255, 255, 255, .045) !important;
+    border: 1px solid rgba(201, 163, 106, .22) !important;
+    border-radius: 4px !important;
+    color: #f4ece0 !important;
+}
+.jn-login .login-box input::placeholder { color: #8a7f70 !important; }
+.jn-login .login-box input:focus {
+    border-color: var(--jn-gold) !important;
+    box-shadow: 0 0 0 3px rgba(201, 163, 106, .18) !important;
+    outline: none;
+}
+.jn-login .login-box button[type="submit"] {
+    border-radius: 4px !important;
+    background: linear-gradient(180deg, #e8392f, #c9241b) !important;
+    letter-spacing: .08em !important;
+    text-transform: uppercase;
+    transition: box-shadow .2s ease, filter .2s ease;
+}
+.jn-login .login-box button[type="submit"]:hover {
+    filter: brightness(1.08);
+    box-shadow: 0 8px 22px -8px rgba(229, 53, 43, .7) !important;
+}
+.jn-login .forgot-link { color: #a8977d !important; }
+.jn-login .forgot-link:hover, .jn-login .toggle-link a:hover { color: #e6c48f !important; }
+.jn-login .toggle-link { color: #b9ad9c !important; }
+.jn-login .toggle-link a { color: var(--jn-gold) !important; font-weight: 600; }
+.jn-login .reg-label { color: #a8977d !important; }
+.jn-login .branch-checkbox-grid { background: rgba(255, 255, 255, .03) !important; border-color: rgba(201, 163, 106, .18) !important; }
+.jn-login .checkbox-label { background: rgba(255, 255, 255, .04) !important; border-color: rgba(201, 163, 106, .16) !important; color: #d8ccba !important; }
+.jn-login .checkbox-label:has(input:checked) { border-color: var(--jn-gold) !important; color: #fff !important; }
+.jn-login .pw-toggle { color: #8a7f70 !important; }
+.jn-login .jn-login-support { margin-top: 2.2rem !important; }
+.jn-login .jn-login-support i, .jn-login .jn-login-support small { color: #8a7f70 !important; }
+.jn-login .jn-login-support strong { color: #ece4d8 !important; }
+body:has(.jn-login) .floating-theme-toggle {
+    z-index: 5;
+    background: rgba(17, 13, 11, .7) !important;
+    border-color: var(--jn-gold-soft) !important;
+    color: #d8ccba !important;
+}
+
+/* Tablet / phone: photo as a dimmed backdrop, panel becomes a frosted card */
+@media (max-width: 900px) {
+    body:has(.jn-login) {
+        display: flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+        padding: 4.5rem 1rem 2.5rem !important;
+    }
+    body:has(.jn-login)::before {
+        right: 0;
+        background:
+            linear-gradient(180deg, rgba(8, 6, 5, .72), rgba(8, 6, 5, .85)),
+            url("login-bg.jpg") 70% center / cover no-repeat;
+    }
+    .jn-login-hero { display: none; }
+    .jn-login {
+        width: 100% !important;
+        max-width: 27rem !important;
+        min-height: 0;
+        margin: 0 auto;
+        padding: 2rem 1.5rem 1.6rem;
+        border: 1px solid var(--jn-gold-soft);
+        border-radius: 10px;
+        box-shadow: 0 24px 60px -20px rgba(0, 0, 0, .8);
+        animation-name: jnLoginRise;
+    }
+    .jn-login::before { display: none; }
+    .jn-login .jn-login-logo { width: 7rem; height: 7rem; }
+}
+@media (max-width: 480px) {
+    body:has(.jn-login) { align-items: flex-start !important; padding-top: 4.5rem !important; }
+}
+@media (prefers-reduced-motion: reduce) {
+    body:has(.jn-login)::before, body:has(.jn-login)::after,
+    .jn-login, .jn-login-hero, .jn-login-hero-eyebrow i { animation: none !important; }
+}
+/* Full-screen photo (centered layout and every phone layout): the light layer spans it too. */
+body:has(.jn-login--center)::after { right: 0; }
+@media (max-width: 900px) {
+    body:has(.jn-login)::after { right: 0; }
+}
+
+/* =============================================== LOGIN — CENTERED GLASS
+   Alternative layout: <main class="jn-login jn-login--center">. The photo
+   goes full screen and the form sits in a centred frosted-glass card.
+   Remove the `jn-login--center` class in login.html to go back to the
+   split (photo left / panel right) layout above — nothing here touches it. */
+body:has(.jn-login--center) {
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    padding: 3rem 1.25rem !important;
+}
+body:has(.jn-login--center)::before {
+    right: 0;
+    background:
+        radial-gradient(38rem 30rem at 50% 50%, rgba(10, 8, 7, .55), transparent 75%),
+        radial-gradient(130% 100% at 50% 50%, transparent 50%, rgba(8, 6, 5, .72) 100%),
+        linear-gradient(180deg, rgba(8, 6, 5, .30) 0%, rgba(20, 12, 6, .12) 40%, rgba(8, 6, 5, .70) 100%),
+        url("login-bg.jpg") center center / cover no-repeat;
+    transform-origin: 50% 50%;
+}
+.jn-login.jn-login--center {
+    width: 100% !important;
+    max-width: 26rem !important;
+    min-height: 0;
+    margin: 0 auto;
+    padding: 2.25rem 2rem 1.75rem;
+    background: rgba(16, 12, 10, .62);
+    -webkit-backdrop-filter: blur(14px) saturate(120%);
+    backdrop-filter: blur(14px) saturate(120%);
+    border: 1px solid var(--jn-gold-soft);
+    border-radius: 12px;
+    box-shadow:
+        inset 0 1px 0 rgba(255, 255, 255, .06),
+        0 30px 80px -24px rgba(0, 0, 0, .85);
+    animation-name: jnLoginRise;
+}
+.jn-login--center::before { display: none; }
+.jn-login--center .jn-login-brand { margin-bottom: 1.6rem; }
+.jn-login--center .jn-login-logo { width: 7.5rem; height: 7.5rem; }
+.jn-login--center .jn-login-support { margin-top: 1.6rem !important; }
+body:has(.jn-login--center) .jn-login-hero { max-width: 26rem; bottom: 6vh; }
+body:has(.jn-login--center) .jn-login-hero-title { font-size: clamp(2rem, 3.2vw, 3rem); }
+body:has(.jn-login--center) .jn-login-hero-tag { font-size: .9rem; }
+@media (max-width: 1100px) {
+    body:has(.jn-login--center) .jn-login-hero { display: none; }
+}
+@media (max-width: 900px) {
+    body:has(.jn-login--center) { padding: 4.5rem 1rem 2.5rem !important; }
+    body:has(.jn-login--center)::before {
+        background:
+            linear-gradient(180deg, rgba(8, 6, 5, .62), rgba(8, 6, 5, .82)),
+            url("login-bg.jpg") 70% center / cover no-repeat;
+    }
+    .jn-login.jn-login--center { max-width: 27rem !important; padding: 2rem 1.5rem 1.6rem; }
+    .jn-login--center .jn-login-logo { width: 7rem; height: 7rem; }
+}
+@media (max-width: 480px) {
+    body:has(.jn-login--center) { align-items: flex-start !important; padding-top: 4.5rem !important; }
+}
+
+/* ======================================================= DESKTOP DENSITY
+   Everything above (and style.css, base 14px at style.css:132) is sized in
+   rem, so this one line scales the whole desktop UI. 12.6px = 90% of 14px:
+   at 100% browser zoom the app now looks the way it used to at 90%.
+   Phones (<900px) and big monitors (>=1920px) keep 14px. */
+@media (min-width: 900px) and (max-width: 1919px) {
+    html { font-size: 12.6px !important; }
+}

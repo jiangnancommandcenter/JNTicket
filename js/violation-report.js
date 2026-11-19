@@ -278,7 +278,7 @@
         return '<!DOCTYPE html><html><head><meta charset="utf-8"><title>'
             + escapeHTML(fileName(v)) + '</title><style>'
             + 'body{font-family:Arial,Helvetica,sans-serif;color:#0f172a;margin:32px;}'
-            + '.bar{height:8px;background:#72bf6a;margin:-32px -32px 18px;}'
+            + '.bar{height:8px;background:#c2211c;margin:-32px -32px 18px;}'
             + 'h1{font-size:18px;margin:18px 0 8px;letter-spacing:.5px;}'
             + 'h2{font-size:12px;margin:0 0 2px;}'
             + 'p.sub{margin:0;font-size:11px;color:#64748b;}'

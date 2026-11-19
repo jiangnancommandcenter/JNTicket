@@ -2737,6 +2737,7 @@ function renderDashboard() {
     renderCharts();
     renderDashHero();
     updateOfflineBadge();
+    if (typeof window.renderVmsWall === 'function') window.renderVmsWall();
 }
 
 /** Hero clock + contextual subtitle (pure render, no timers). */
@@ -3157,8 +3158,8 @@ function renderStatusChart() {
     if (statusChart) { statusChart.data.datasets[0].data = [online, offline]; statusChart.update(); return; }
     statusChart = new Chart(ctx, {
         type: 'doughnut',
-        data: { labels: ['Online', 'Offline'], datasets: [{ data: [online, offline], backgroundColor: ['#22c55e', '#ef4444'], borderColor: ['#FFFFFF', '#FFFFFF'], borderWidth: 3, hoverOffset: 8 }] },
-        options: { responsive: true, maintainAspectRatio: false, cutout: '65%', plugins: { legend: { position: 'bottom', labels: { color: '#64748B', padding: 14, font: { family: 'Inter', size: 12 } } } } }
+        data: { labels: ['Online', 'Offline'], datasets: [{ data: [online, offline], backgroundColor: ['#2fd27a', '#ff4b40'], borderColor: ['rgba(0,0,0,0)', 'rgba(0,0,0,0)'], borderWidth: 2, hoverOffset: 4 }] },
+        options: { responsive: true, maintainAspectRatio: false, cutout: '72%', plugins: { legend: { position: 'bottom', labels: { color: '#64748B', padding: 14, font: { family: 'JetBrains Mono', size: 12 } } } } }
     });
 }
 
@@ -3230,8 +3231,8 @@ async function renderTrendChart() {
     if (trendChart) { trendChart.data.labels = labels; trendChart.data.datasets[0].data = dd; trendChart.update(); return; }
     trendChart = new Chart(ctx, {
         type: 'line',
-        data: { labels, datasets: [{ label: 'Downtime (min)', data: dd, borderColor: '#ef4444', backgroundColor: 'rgba(239,68,68,0.1)', fill: true, tension: 0.3, pointBackgroundColor: '#ef4444', pointRadius: 3, borderWidth: 2 }] },
-        options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { labels: { color: '#64748B', font: { family: 'Inter', size: 11 } } } }, scales: { x: { grid: { color: 'rgba(148,163,184,0.25)' }, ticks: { color: '#64748B', font: { family: 'Inter', size: 10 }, maxRotation: 0, autoSkip: true, maxTicksLimit: window.innerWidth <= 640 ? 7 : undefined }, title: { display: true, text: 'Day', color: '#64748B' } }, y: { grid: { color: 'rgba(148,163,184,0.25)' }, ticks: { color: '#64748B', font: { family: 'Inter', size: 10 } }, title: { display: true, text: 'Minutes', color: '#64748B' }, beginAtZero: true } } }
+        data: { labels, datasets: [{ label: 'Downtime (min)', data: dd, borderColor: '#ff4b40', backgroundColor: 'rgba(255,75,64,0.10)', fill: true, tension: 0, pointBackgroundColor: '#ff4b40', pointRadius: 2, pointStyle: 'rect', borderWidth: 1.5 }] },
+        options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { labels: { color: '#64748B', font: { family: 'JetBrains Mono', size: 11 } } } }, scales: { x: { grid: { color: 'rgba(102,120,138,0.22)' }, ticks: { color: '#64748B', font: { family: 'JetBrains Mono', size: 10 }, maxRotation: 0, autoSkip: true, maxTicksLimit: window.innerWidth <= 640 ? 7 : undefined }, title: { display: true, text: 'Day', color: '#64748B' } }, y: { grid: { color: 'rgba(102,120,138,0.22)' }, ticks: { color: '#64748B', font: { family: 'JetBrains Mono', size: 10 } }, title: { display: true, text: 'Minutes', color: '#64748B' }, beginAtZero: true } } }
     });
 }
 

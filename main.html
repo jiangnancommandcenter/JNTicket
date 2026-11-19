@@ -8,7 +8,8 @@
     <!-- Pre-paint theme: apply saved dark/light theme BEFORE first paint (no flash).
          Default is LIGHT (the OS preference is ignored); dark is opt-in via the
          toggle button, and the choice is remembered in localStorage. -->
-    <script>(function(){try{var t=localStorage.getItem('rcms_theme');if(!t){t='light';}document.documentElement.setAttribute('data-theme',t);}catch(e){document.documentElement.setAttribute('data-theme','light');}})();</script>
+    <script>(function(){try{var t=localStorage.getItem('rcms_theme');if(!t){t='dark';}document.documentElement.setAttribute('data-theme',t);}catch(e){document.documentElement.setAttribute('data-theme','dark');}})();</script>
+    <script src="js/boot-splash.js"></script>
 
     <!-- App icon + installable manifest. theme_color is a fixed brand green:
          dark mode here is OPT-IN (see README), so prefers-color-scheme would
@@ -16,12 +17,11 @@
     <link rel="icon" href="tamang-logo-64.png" type="image/png">
     <link rel="apple-touch-icon" href="tamang-logo-180.png">
     <link rel="manifest" href="manifest.json">
-    <meta name="theme-color" id="themeColorMeta" content="#72bf6a">
+    <meta name="theme-color" id="themeColorMeta" content="#0e1319">
 
     <!-- Font Awesome 6 -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
     <!-- Google Fonts: Inter -->
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
     <!-- Firebase + Google APIs: warm up connections early so the SDKs load faster -->
     <link rel="preconnect" href="https://www.gstatic.com" crossorigin>
     <link rel="preconnect" href="https://firestore.googleapis.com" crossorigin>
@@ -139,6 +139,10 @@
     </style>
 
     <link rel="stylesheet" href="tailwind.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600;700&family=Barlow+Condensed:wght@500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="jn-ui.css">
 </head>
 <body>
 
@@ -415,6 +419,16 @@
                     <div class="dash-progress"><span class="dash-progress-fill violations u-bar-empty" id="violationsBar"></span></div>
                 </div>
             </div>
+
+            <!-- Camera wall: one tile per branch (js/vms-wall.js) -->
+            <div class="section-header">
+                <div>
+                    <h2><i class="fas fa-video"></i>Branch Wall</h2>
+                    <p class="u-section-sub">Click a branch to open its details</p>
+                </div>
+                <div class="vms-wall-legend" id="vmsWallLegend"></div>
+            </div>
+            <div class="vms-wall" id="vmsWall"></div>
 
             <!-- Needs Attention + Live Activity -->
             <div class="dash-split">
@@ -1075,7 +1089,7 @@
             <div class="print-header u-hidden" id="printTextHeader">
                 <div class="print-brand">
                     <div class="print-logo">
-                        <img src="logo.png" alt="Jiangnan CCTV Logo">
+                        <img src="tamang-logo-192.png" alt="Jiangnan CCTV Logo">
                     </div>
                     <div class="print-brand-text">
                         <h2>Jiangnan Hotpot</h2>
@@ -1141,7 +1155,7 @@
                             <select id="branchSelect" required style="flex:1;">
                                 <option value="">— Select Branch —</option>
                             </select>
-                            <button type="button" class="btn btn-sm btn-add-branch" id="btnAddBranch" style="padding:10px 14px;background:var(--color-primary-bg);color:var(--color-primary);border:1px solid rgba(114,191,106,0.4);border-radius:var(--radius-md);font-size:0.82rem;font-weight:600;white-space:nowrap;transition:var(--transition);display:flex;align-items:center;gap:4px;">
+                            <button type="button" class="btn btn-sm btn-add-branch" id="btnAddBranch" style="padding:10px 14px;background:var(--color-primary-bg);color:var(--color-primary);border:1px solid var(--color-danger-border);border-radius:var(--radius-md);font-size:0.82rem;font-weight:600;white-space:nowrap;transition:var(--transition);display:flex;align-items:center;gap:4px;">
                                 <i class="fas fa-plus"></i> New
                             </button>
                         </div>
@@ -1900,10 +1914,10 @@
     <script src="js/error-reporter.js"></script>
     <script src="js/auth.js"></script>
     <!-- ===== Desktop Notification Feature ===== -->
-        <script src="js/notifications.js"></script>
+        <script src="js/notifications.js?v=sounds-5"></script>
     <!-- ===== HR <-> Superadmin chat (superadmin only) =====
          Loaded after firebase.js so the global `db` / `auth` exist. -->
-    <script src="js/chat.js"></script>
+    <script src="js/chat.js?v=sounds-5"></script>
 <!-- Unsend confirm modal — loads AFTER chat.js so window.ChatService exists;
      it calls ChatService.unsendMessage() behind the author-only rules gate. -->
 <script src="js/chat-unsend.js"></script>
@@ -1932,6 +1946,7 @@
          encoder library itself is fetched on first use. Before script.js. -->
     <script src="js/video-compressor.js"></script>
     <script src="script.js?v=branch-backfill-2"></script>
+    <script src="js/vms-wall.js"></script>
     <!-- ===== HR uploads presence tracker (superadmin dashboard) ====
          Loaded AFTER script.js so window.HrUploads exists when violations
          rows render their upload indicators. Toggles the amber has-uploads

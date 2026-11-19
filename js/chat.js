@@ -6458,28 +6458,51 @@ function syncSummaryFromMessage(roomId, msg) {
     // ==============================================================
     //  INCOMING MESSAGE SOUND
     //
-    //  Delegates to the app's shared, preloaded notification sound
-    //  (js/notifications.js), so a chat message sounds identical to a ticket
-    //  alert and both use the same preloaded Audio.
-    //
-    //  ⚠️ THE LOCAL `new Audio(...)` FALLBACK WAS DELETED. It existed beside a
-    //  guard on `window.playNotificationSound`, but that function was never
-    //  exported — so the guard was always false, the shared path was dead code,
-    //  and the fallback silently became the only path. notifications.js now
-    //  exports it (see the EXPOSE GLOBALLY block there), so the delegation
-    //  below is the single one. The `typeof` guard is kept: it is what stops a
-    //  missing module from throwing inside the failure path.
+    //  Chat uses its own Telegram-style sound (see below), deliberately
+    //  different from the ticket chime so staff can tell them apart.
     // ==============================================================
 
+    // Chat messages now have their OWN sound (myinstants "Telegram
+    // Notification"), separate from the ticket chime. Local-first like the
+    // others: sounds/chat.mp3 is the copy, the myinstants URL is the fallback.
+    // One Audio element, built once and reused for every message.
+    var chatSoundUrl = 'sounds/chat.mp3';
+    var chatSoundFallbackUrl = 'https://www.myinstants.com/media/sounds/telegram-notification.mp3';
+    var chatAudio = null;
+
     function playIncomingSound() {
+        // Max loudness: notifications.js plays the decoded file through a
+        // gain boost + limiter; the plain element below is only the fallback.
+        if (typeof window.playBoostedSound === 'function') {
+            try { window.playBoostedSound(chatSoundUrl, playIncomingSoundElement); return; }
+            catch (e) { /* fall through to the element */ }
+        }
+        playIncomingSoundElement();
+    }
+
+    function playIncomingSoundElement() {
         try {
-            if (typeof window.playNotificationSound === 'function') {
-                window.playNotificationSound();
-                return;
+            if (!chatAudio) {
+                chatAudio = new Audio(chatSoundUrl);
+                chatAudio.preload = 'auto';
+                chatAudio.addEventListener('error', function handleChatSoundError() {
+                    chatAudio.removeEventListener('error', handleChatSoundError);
+                    try {
+                        chatAudio.src = chatSoundFallbackUrl;
+                        chatAudio.load();
+                        // The element is only built when a message arrives,
+                        // so this error always cost that message its sound —
+                        // play the fallback now instead of staying silent.
+                        var fp = chatAudio.play();
+                        if (fp && fp.catch) fp.catch(function () { /* autoplay may be blocked */ });
+                    } catch (e) { /* ignore */ }
+                });
             }
-            // No notification module on this page. Stay silent — a sound is a
-            // nicety, and constructing a new Audio per message would be the
-            // very thing the shared path avoids.
+            chatAudio.pause();
+            chatAudio.currentTime = 0;
+            chatAudio.volume = 1;
+            const p = chatAudio.play();
+            if (p && p.catch) p.catch(function () { /* autoplay may be blocked */ });
         } catch (e) {
             // Audio is a nicety; never let it break the chat.
         }
