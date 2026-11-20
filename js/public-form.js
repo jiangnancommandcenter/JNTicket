@@ -59,11 +59,121 @@
         if (successModal) successModal.style.display = 'none';
         showTrackModal();
     });
+    // One entry per picked file: { name, status: 'uploading'|'done'|'failed', pct }.
+    // `uploadedAttachments` holds only the finished uploads, which is what is
+    // saved on the ticket.
+    var uploadItems = [];
+    var pendingUploads = 0;
+    var uploadGen = 0; // bumped on reset so late responses from cleared uploads are ignored
+
+    function escapeText(s) {
+        return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
+            return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+        });
+    }
+
     function updateFileList() {
         if (!fileListEl) return;
-        if (uploadedAttachments.length === 0) { fileListEl.textContent = ''; return; }
-        var names = uploadedAttachments.map(function (a) { return a.name || 'Attachment'; }).join(', ');
-        fileListEl.textContent = uploadedAttachments.length + ' file(s): ' + names;
+        if (uploadItems.length === 0) { fileListEl.innerHTML = ''; return; }
+        fileListEl.innerHTML = uploadItems.map(function (it) {
+            var icon, text, color;
+            if (it.status === 'done') { icon = 'fa-check-circle'; text = 'Uploaded'; color = '#3fb950'; }
+            else if (it.status === 'failed') { icon = 'fa-times-circle'; text = 'Upload failed'; color = '#e5484d'; }
+            else { icon = 'fa-spinner fa-spin'; text = 'Uploading ' + (it.pct || 0) + '%'; color = 'inherit'; }
+            return '<div style="display:flex;gap:6px;align-items:center;margin-top:4px;color:' + color + '">' +
+                '<i class="fas ' + icon + '"></i><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' +
+                escapeText(it.name) + ' &mdash; ' + text + '</span></div>';
+        }).join('');
+        updateSubmitState();
+    }
+
+    function updateSubmitState() {
+        if (!btnSubmit || busy) return;
+        if (pendingUploads > 0) {
+            btnSubmit.disabled = true;
+            btnSubmit.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Uploading attachments...';
+        } else {
+            btnSubmit.disabled = false;
+            btnSubmit.innerHTML = '<i class="fas fa-paper-plane"></i> Submit Ticket';
+        }
+    }
+
+    // Cloudinary-safe unique public_id (same approach as js/owner-ticket-form.js),
+    // so two files with the same base name never overwrite each other.
+    function makeUniquePublicId(fileName) {
+        var dotIdx = String(fileName || '').lastIndexOf('.');
+        var base = dotIdx > 0 ? String(fileName).slice(0, dotIdx) : String(fileName);
+        var safeBase = base.replace(/[^A-Za-z0-9 _.\\-]/g, ' ').replace(/\s+/g, ' ').trim() || 'file';
+        return safeBase + '-' + Math.random().toString(36).slice(2, 10);
+    }
+
+    // Uploads one file and records it in the CANONICAL attachment shape that the
+    // operator's ticket view reads (secure_url / public_id / name, plus the
+    // url / publicId / fileName aliases) — the same shape owner-ticket-form.js writes.
+    function uploadToCloudinary(file) {
+        var gen = uploadGen;
+        var item = { name: file.name, status: 'uploading', pct: 0 };
+        uploadItems.push(item);
+        pendingUploads++;
+        updateFileList();
+
+        function finish(ok) {
+            if (gen !== uploadGen) return;
+            item.status = ok ? 'done' : 'failed';
+            pendingUploads = Math.max(0, pendingUploads - 1);
+            updateFileList();
+            if (!ok) alert('Upload failed: ' + file.name + '. Please try attaching it again.');
+        }
+
+        var data = new FormData();
+        data.append('file', file);
+        data.append('upload_preset', CLOUDINARY_UPLOAD_PRESET);
+        data.append('public_id', makeUniquePublicId(file.name));
+        var xhr = new XMLHttpRequest();
+        xhr.open('POST', 'https://api.cloudinary.com/v1_1/' + CLOUDINARY_CLOUD_NAME + '/auto/upload');
+        xhr.upload.onprogress = function (e) {
+            if (!e.lengthComputable || gen !== uploadGen) return;
+            item.pct = Math.min(99, Math.round((e.loaded / e.total) * 100));
+            updateFileList();
+        };
+        xhr.onload = function () {
+            if (gen !== uploadGen) return;
+            if (xhr.status < 200 || xhr.status >= 300) {
+                console.error('[PublicForm] Cloudinary upload failed', xhr.status, xhr.responseText);
+                return finish(false);
+            }
+            try {
+                var res = JSON.parse(xhr.responseText);
+                uploadedAttachments.push({
+                    url: res.secure_url,
+                    publicId: res.public_id,
+                    fileName: file.name,
+                    secure_url: res.secure_url,
+                    public_id: res.public_id,
+                    name: file.name,
+                    resource_type: res.resource_type || '',
+                    format: res.format || '',
+                    mimeType: file.type || 'application/octet-stream',
+                    bytes: file.size,
+                    uploadedAt: new Date().toISOString()
+                });
+                finish(true);
+            } catch (err) {
+                console.error('[PublicForm] Could not parse Cloudinary response', err);
+                finish(false);
+            }
+        };
+        xhr.onerror = function () { finish(false); };
+        xhr.send(data);
+    }
+
+    function clearUploads() {
+        uploadGen++;
+        uploadedAttachments = [];
+        uploadItems = [];
+        pendingUploads = 0;
+        updateFileList();
+        updateSubmitState();
     }
     var fileInput = document.getElementById('publicAttachments');
     if (fileInput) {
@@ -84,6 +194,10 @@
         publicForm.addEventListener('submit', function (e) {
             e.preventDefault();
             if (busy) return;
+            if (pendingUploads > 0) {
+                alert('Please wait — attachments are still uploading.');
+                return;
+            }
             var nameEl = document.getElementById('publicName');
             var positionEl = document.getElementById('publicPosition');
             var emailEl = document.getElementById('publicEmail');
@@ -128,8 +242,8 @@
                 location: locationEl.value.trim(),
                 incident: incidentEl.value.trim(),
                 description: descriptionEl.value.trim(),
-                attachments: uploadedAttachments,
-                requesterAttachments: uploadedAttachments,
+                attachments: uploadedAttachments.slice(),
+                requesterAttachments: uploadedAttachments.slice(),
                 status: 'Pending',
                 approvalStatus: 'pending',
                 filedByRole: 'public',
@@ -147,8 +261,7 @@
                     setBusy(false);
                     if (ticketNumberEl) ticketNumberEl.textContent = payload.ticketNumber;
                     publicForm.reset();
-                    uploadedAttachments = [];
-                    updateFileList();
+                    clearUploads();
                     if (successModal) successModal.style.display = 'flex';
                     if (fileInput) fileInput.value = '';
                 })
@@ -162,8 +275,7 @@
     if (btnReset) btnReset.addEventListener('click', function () {
         publicForm.reset();
         publicForm.querySelectorAll('.field-missing').forEach(function (el) { el.classList.remove('field-missing'); });
-        uploadedAttachments = [];
-        updateFileList();
+        clearUploads();
         if (fileInput) fileInput.value = '';
     });
 })();
