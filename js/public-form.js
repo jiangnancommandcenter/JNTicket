@@ -92,10 +92,28 @@
             var locationEl = document.getElementById('publicLocation');
             var incidentEl = document.getElementById('publicIncident');
             var descriptionEl = document.getElementById('publicDescription');
-            if (!nameEl.value.trim() || !positionEl.value.trim() || !emailEl.value.trim() ||
-                !contactEl.value.trim() || !datetimeEl.value || !locationEl.value.trim() ||
-                !incidentEl.value.trim() || !descriptionEl.value.trim()) {
-                alert('Please fill in all required fields.');
+            var requiredFields = [
+                [nameEl, 'Name of Reporter'], [positionEl, 'Position'], [emailEl, 'Email'],
+                [contactEl, 'Contact Number'], [datetimeEl, 'Incident Date & Time'],
+                [locationEl, 'Location'], [incidentEl, 'Incident'], [descriptionEl, 'Full Description']
+            ];
+            var missing = requiredFields.filter(function (f) { return !f[0] || !String(f[0].value || '').trim(); });
+            requiredFields.forEach(function (f) { if (f[0]) f[0].classList.remove('field-missing'); });
+            if (missing.length) {
+                missing.forEach(function (f) {
+                    if (!f[0]) return;
+                    f[0].classList.add('field-missing');
+                    f[0].addEventListener('input', function clear() {
+                        f[0].classList.remove('field-missing');
+                        f[0].removeEventListener('input', clear);
+                    });
+                });
+                alert('Please fill in: ' + missing.map(function (f) { return f[1]; }).join(', '));
+                var first = missing[0][0];
+                if (first) {
+                    try { first.scrollIntoView({ behavior: 'smooth', block: 'center' }); } catch (_) {}
+                    first.focus();
+                }
                 return;
             }
             setBusy(true);
@@ -143,6 +161,7 @@
     }
     if (btnReset) btnReset.addEventListener('click', function () {
         publicForm.reset();
+        publicForm.querySelectorAll('.field-missing').forEach(function (el) { el.classList.remove('field-missing'); });
         uploadedAttachments = [];
         updateFileList();
         if (fileInput) fileInput.value = '';

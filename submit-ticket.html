@@ -1102,6 +1102,11 @@
                 justify-content: center;
             }
         }
+        /* Required field left empty on submit (set by js/public-form.js) */
+        .track-input.field-missing {
+            border-color: #e5484d !important;
+            box-shadow: 0 0 0 2px rgba(229, 72, 77, .25) !important;
+        }
     </style>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -1184,7 +1189,7 @@
                     </div>
                     <div class="track-form-group">
                         <label for="publicContact"><i class="fas fa-phone"></i> Contact Number</label>
-                        <input type="text" id="publicContact" class="track-input" placeholder="09171234567" required>
+                        <input type="text" id="publicContact" class="track-input" placeholder="e.g. 09171234567" required>
                     </div>
                     <div class="track-form-group">
                         <label for="publicDatetime"><i class="fas fa-calendar"></i> Incident Date &amp; Time</label>
@@ -2476,7 +2481,7 @@ document.getElementById('trackDisplayBranch').textContent = data.branch || '\u20
 
         })();
     </script>
-    <script src="js/public-form.js"></script>
+    <script src="js/public-form.js?v=missing-fields-1"></script>
     <style>
         /* Public submission form grid */
         .form-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px 20px; }

@@ -362,7 +362,18 @@ service cloud.firestore {
       //
       // TODO (security): check request.resource.data.branch against the
       // filer's assigned branches once that list is trustworthy server-side.
-      allow create: if isSignedIn();
+      //
+      // EXCEPTION: the login-free Head Office form on submit-ticket.html
+      // (js/public-form.js) is still in use. It may create a ticket without a
+      // session, but only one shaped exactly like that form's output: Head
+      // office, filedByRole 'public', and still pending approval, so nothing
+      // it files is visible or actioned until an owner approves it.
+      allow create: if isSignedIn() || (
+        request.resource.data.branch == 'Head office' &&
+        request.resource.data.filedByRole == 'public' &&
+        request.resource.data.approvalStatus == 'pending' &&
+        request.resource.data.status == 'Pending'
+      );
 
       // Signed-in users (operators / superadmins / owners) read all tickets.
       // Public "Track Ticket Status" lookup reads ONLY approved tickets.
